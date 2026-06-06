@@ -1,28 +1,22 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import './App.css';
 
-// ============================================================================
-// Types
-// ============================================================================
-interface WeatherData {
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface Weather {
+  location: string;
   temperature: number;
   rainProbability: number;
   windSpeed: number;
   uvIndex: number;
   forecast: string;
-  location: string;
 }
 
-interface ChecklistItem {
-  label: string;
-  pass: boolean;
-  value: string;
-}
+interface CheckItem { label: string; pass: boolean; value: string; }
 
-interface AnalysisResult {
+interface Analysis {
   intent: string;
   safetyScore: number;
-  checklist: ChecklistItem[];
+  checklist: CheckItem[];
   directAnswer: string;
   explanation: string;
   recommendation: string;
@@ -30,993 +24,719 @@ interface AnalysisResult {
 
 interface Message {
   id: string;
-  sender: 'user' | 'copilot';
+  from: 'user' | 'bot';
   text: string;
-  timestamp: string;
-  analysis?: AnalysisResult;
+  time: string;
+  analysis?: Analysis;
 }
 
-// ============================================================================
-// Animated Custom SVG Icons
-// ============================================================================
+// ─── Inline SVG Icons ─────────────────────────────────────────────────────────
+const BrandIcon = () => (
+  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--color-primary)' }}>
+    <path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.47 0-.89.09-1.3.27A7 7 0 1 0 3 15.5c0 1.93 1.57 3.5 3.5 3.5h11z" fill="currentColor" fillOpacity="0.12"/>
+    <path d="M12 10v4M10 12h4" strokeLinecap="round"/>
+  </svg>
+);
+
+const BotIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--color-primary)' }}>
+    <rect x="3" y="11" width="18" height="10" rx="2" fill="currentColor" fillOpacity="0.1"/>
+    <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
+    <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+    <path d="M9 19.5c1.5.8 4.5.8 6 0M12 2v3M9 5h6" strokeLinecap="round"/>
+  </svg>
+);
+
+const UserAvatarIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--color-text-muted)' }}>
+    <circle cx="12" cy="7" r="4" fill="currentColor" fillOpacity="0.1"/>
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+  </svg>
+);
 
 const SunIcon = () => (
-  <svg className="w-10 h-10 text-amber-500 animate-sun-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="4" fill="currentColor" fillOpacity="0.2" />
-    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-  </svg>
-);
-
-const CloudIcon = () => (
-  <svg className="w-10 h-10 text-slate-400 animate-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.47 0-.89.09-1.3.27A7 7 0 1 0 3 15.5c0 1.93 1.57 3.5 3.5 3.5h11z" fill="currentColor" fillOpacity="0.1" />
-  </svg>
-);
-
-const PartlyCloudyIcon = () => (
-  <svg className="w-10 h-10 animate-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    {/* Sun */}
-    <path className="text-amber-500 animate-sun-spin" d="M12 2v2M4.93 4.93l1.41 1.41M2 12h2M6.34 17.66l-1.41 1.41" strokeLinecap="round" />
-    <circle className="text-amber-500 animate-sun-spin" cx="12" cy="12" r="3" fill="currentColor" fillOpacity="0.2" />
-    {/* Cloud */}
-    <path className="text-slate-400" d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.47 0-.89.09-1.3.27A7 7 0 1 0 3 15.5c0 1.93 1.57 3.5 3.5 3.5h11z" fill="currentColor" fillOpacity="0.8" />
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" className="anim-spin">
+    <circle cx="12" cy="12" r="4" fill="#f59e0b" fillOpacity="0.2"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" strokeLinecap="round"/>
   </svg>
 );
 
 const RainIcon = () => (
-  <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path className="text-slate-400 animate-cloud" d="M17 16.5a4 4 0 0 0 0-8h-.7a7 7 0 1 0-12 5.5" fill="currentColor" fillOpacity="0.1" />
-    {/* Rain drops */}
-    <path className="text-blue-500 animate-rain-drop-1" d="M8 18v2" />
-    <path className="text-blue-500 animate-rain-drop-2" d="M12 18v2" />
-    <path className="text-blue-500 animate-rain-drop-3" d="M16 18v2" />
-  </svg>
-);
-
-const ThunderIcon = () => (
-  <svg className="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path className="text-slate-500 animate-cloud" d="M17 16.5a4 4 0 0 0 0-8h-.7a7 7 0 1 0-12 5.5" fill="currentColor" fillOpacity="0.15" />
-    {/* Lightning */}
-    <path className="text-yellow-400 fill-yellow-400" d="M13 14h-3l2-5h-3l4-5-1 5h3z" />
-    {/* Rain drops */}
-    <path className="text-blue-600 animate-rain-drop-1" d="M8 19v2" />
-    <path className="text-blue-600 animate-rain-drop-3" d="M14 19v2" />
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M17 16.5a4 4 0 0 0 0-8h-.7a7 7 0 1 0-12 5.5" stroke="#94a3b8" className="anim-cloud" fill="#94a3b8" fillOpacity="0.1"/>
+    <path d="M8 17v2" stroke="#3b82f6" className="anim-rain-1" strokeLinecap="round"/>
+    <path d="M12 17v2" stroke="#3b82f6" className="anim-rain-2" strokeLinecap="round"/>
+    <path d="M16 17v2" stroke="#3b82f6" className="anim-rain-3" strokeLinecap="round"/>
   </svg>
 );
 
 const WindIcon = () => (
-  <svg className="w-10 h-10 text-cyan-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    {/* Turbine Stand */}
-    <path d="M12 12v10M9 22h6" strokeWidth="2" />
-    {/* Spinning Turbine Blades */}
-    <g className="animate-windmill">
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-      <path d="M12 12V4c0.5 0 2 1.5 2 3s-1.5 5-2 5z" fill="currentColor" fillOpacity="0.3" />
-      <path d="M12 12h8c0 0.5-1.5 2-3 2s-5-1.5-5-2z" fill="currentColor" fillOpacity="0.3" />
-      <path d="M12 12L6.34 6.34c0.35-.35 2.12-.5 3.18.56s.48 5.1-.02 5.1z" fill="currentColor" fillOpacity="0.3" />
-    </g>
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2">
+    <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" strokeLinecap="round"/>
   </svg>
 );
 
-const SnowIcon = () => (
-  <svg className="w-10 h-10 text-sky-300 animate-cloud" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25" />
-    <path className="animate-rain-drop-2" d="M8 16h.01M12 16h.01M16 16h.01M10 19h.01M14 19h.01" strokeWidth="3" />
+const CloudIcon = () => (
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" className="anim-cloud">
+    <path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.47 0-.89.09-1.3.27A7 7 0 1 0 3 15.5c0 1.93 1.57 3.5 3.5 3.5h11z" fill="currentColor" fillOpacity="0.1"/>
   </svg>
 );
 
-const CopilotIcon = () => (
-  <svg className="w-8 h-8 text-indigo-500 dark:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="11" width="18" height="10" rx="2" fill="currentColor" fillOpacity="0.1" />
-    <circle cx="8" cy="16" r="1.5" fill="currentColor" />
-    <circle cx="16" cy="16" r="1.5" fill="currentColor" />
-    <path d="M9 19c1.5 1 4.5 1 6 0" strokeLinecap="round" />
-    <path d="M12 2v3M9 5h6M12 11V8" strokeLinecap="round" />
-    <path d="M2 13h1M21 13h1" strokeLinecap="round" />
-  </svg>
-);
-
-const UserIcon = () => (
-  <svg className="w-8 h-8 text-slate-500 dark:text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" fill="currentColor" fillOpacity="0.1" />
-  </svg>
-);
-
-// Helper to render appropriate weather icon based on status string
-const renderWeatherIcon = (forecast: string) => {
-  switch (forecast) {
-    case 'Sunny': return <SunIcon />;
-    case 'Partly Cloudy': return <PartlyCloudyIcon />;
-    case 'Overcast': return <CloudIcon />;
-    case 'Showers': return <RainIcon />;
-    case 'Thunderstorm': return <ThunderIcon />;
-    case 'Windy': return <WindIcon />;
-    case 'Chilly/Snowy': return <SnowIcon />;
-    default: return <SunIcon />;
-  }
+const weatherIcon = (f: string) => {
+  if (f === 'Sunny') return <SunIcon />;
+  if (f === 'Showers' || f === 'Thunderstorm') return <RainIcon />;
+  if (f === 'Windy') return <WindIcon />;
+  return <CloudIcon />;
 };
 
-// ============================================================================
-// Presets configuration
-// ============================================================================
-const LOCATION_PRESETS: WeatherData[] = [
-  {
-    location: 'Nairobi (Farming Highlands)',
-    temperature: 21,
-    rainProbability: 75,
-    windSpeed: 12,
-    uvIndex: 6,
-    forecast: 'Showers'
-  },
-  {
-    location: 'Miami (Coastal Beach)',
-    temperature: 31,
-    rainProbability: 10,
-    windSpeed: 14,
-    uvIndex: 10,
-    forecast: 'Sunny'
-  },
-  {
-    location: 'Cape Town (Windy Ridge)',
-    temperature: 17,
-    rainProbability: 25,
-    windSpeed: 48,
-    uvIndex: 4,
-    forecast: 'Windy'
-  },
-  {
-    location: 'London (Chilly Storm)',
-    temperature: 8,
-    rainProbability: 85,
-    windSpeed: 25,
-    uvIndex: 1,
-    forecast: 'Thunderstorm'
-  }
+// ─── Data ─────────────────────────────────────────────────────────────────────
+const PRESETS: Weather[] = [
+  { location: 'Nairobi — Farming Highlands', temperature: 21, rainProbability: 75, windSpeed: 12, uvIndex: 6, forecast: 'Showers' },
+  { location: 'Miami — Coastal Beach',       temperature: 31, rainProbability: 10, windSpeed: 14, uvIndex: 10, forecast: 'Sunny' },
+  { location: 'Cape Town — Windy Ridge',     temperature: 17, rainProbability: 25, windSpeed: 48, uvIndex: 4,  forecast: 'Windy' },
+  { location: 'London — Chilly Storm',       temperature: 8,  rainProbability: 85, windSpeed: 25, uvIndex: 1,  forecast: 'Showers' },
 ];
 
-// Suggested questions
-const QUICK_SUGGESTIONS = [
-  { label: '🌾 Maize Planting', query: 'Can I plant maize this weekend?' },
-  { label: '🏖️ Beach Holiday', query: 'Should I go to the beach this weekend?' },
-  { label: '🏃 Outdoor Sports', query: 'Is it a good day to run outdoors?' },
-  { label: '🎨 Fence Painting', query: 'Can I paint my garden fence today?' },
-  { label: '🚜 Crop Spraying', query: 'Is it safe to spray pesticides on my crops today?' },
-  { label: '🚗 Car Washing', query: 'Should I wash my car today?' }
+const SUGGESTIONS = [
+  { label: '🌾 Maize Planting', q: 'Can I plant maize this weekend?' },
+  { label: '🏖️ Beach Trip',    q: 'Should I go to the beach this weekend?' },
+  { label: '🏃 Running',        q: 'Is it a good day to run outdoors?' },
+  { label: '🎨 Fence Painting', q: 'Can I paint my garden fence today?' },
+  { label: '🚜 Crop Spraying',  q: 'Is it safe to spray pesticides on my crops today?' },
+  { label: '🚗 Car Wash',       q: 'Should I wash my car today?' },
 ];
 
-// ============================================================================
-// WeatherAI Core Decision Engine (Client Side Simulator)
-// ============================================================================
-function analyzeWeatherQuery(query: string, weather: WeatherData): AnalysisResult {
+// ─── Decision Engine ──────────────────────────────────────────────────────────
+function analyze(query: string, w: Weather): Analysis {
   const q = query.toLowerCase();
-  let intent = 'General Planning';
-  let directAnswer = '';
-  let explanation = '';
-  let recommendation = '';
-  let safetyScore = 100;
-  let checklist: ChecklistItem[] = [];
+  let intent = 'Daily Planning', directAnswer = '', explanation = '', recommendation = '';
+  let safetyScore = 80;
+  let checklist: CheckItem[] = [];
 
-  // 1. Agriculture / Crop Spraying / Pesticides
-  if (q.includes('plant') || q.includes('maize') || q.includes('crop') || q.includes('farm') || q.includes('seed') || q.includes('fertilizer') || q.includes('spray') || q.includes('pesticide') || q.includes('harvest')) {
+  if (q.includes('plant') || q.includes('maize') || q.includes('farm') || q.includes('seed') || q.includes('crop') || q.includes('spray') || q.includes('pesticide')) {
     intent = 'Agriculture & Farming';
-    const isSpraying = q.includes('spray') || q.includes('pesticide') || q.includes('fertilizer');
-    
+    const isSpraying = q.includes('spray') || q.includes('pesticide');
     if (isSpraying) {
-      const windOk = weather.windSpeed <= 20;
-      const rainOk = weather.rainProbability <= 25;
-      const tempOk = weather.temperature >= 10 && weather.temperature <= 32;
-      
+      const windOk = w.windSpeed <= 20, rainOk = w.rainProbability <= 25, tempOk = w.temperature >= 10 && w.temperature <= 32;
       checklist = [
-        { label: 'Wind Speed (Max 20 km/h)', pass: windOk, value: `${weather.windSpeed} km/h` },
-        { label: 'Rain Prob (Max 25%)', pass: rainOk, value: `${weather.rainProbability}%` },
-        { label: 'Temp Range (10°C - 32°C)', pass: tempOk, value: `${weather.temperature}°C` }
+        { label: 'Wind Speed (max 20 km/h)', pass: windOk, value: `${w.windSpeed} km/h` },
+        { label: 'Rain Probability (max 25%)', pass: rainOk, value: `${w.rainProbability}%` },
+        { label: 'Temperature (10°C – 32°C)', pass: tempOk, value: `${w.temperature}°C` },
       ];
-      
       safetyScore = (windOk ? 40 : 0) + (rainOk ? 40 : 0) + (tempOk ? 20 : 0);
-      
       if (windOk && rainOk && tempOk) {
         directAnswer = 'Conditions are safe to apply crop sprays.';
-        explanation = `Low wind speeds of ${weather.windSpeed} km/h minimize spray drift, and minimal rain risk ensures treatment won't wash off.`;
-        recommendation = 'Recommended spraying time: Saturday morning. Proceed with application.';
+        explanation = `Wind at ${w.windSpeed} km/h minimises drift risk and low rain probability keeps the treatment effective.`;
+        recommendation = 'Proceed with spraying. Best window: next 4 hours.';
       } else {
-        directAnswer = 'Postpone crop spraying activities.';
-        const reasons: string[] = [];
-        if (!windOk) reasons.push(`high winds (${weather.windSpeed} km/h) causing drift`);
-        if (!rainOk) reasons.push(`high rain probability (${weather.rainProbability}%) washing chemicals off`);
-        if (!tempOk) reasons.push(`unfavorable temperature (${weather.temperature}°C)`);
-        
-        explanation = `Spraying is risky right now due to ${reasons.join(' and ')}.`;
-        recommendation = 'Recommendation: Wait for calmer, drier conditions (Wind < 20 km/h, Rain < 25%).';
+        directAnswer = 'Postpone crop spraying today.';
+        const r: string[] = [];
+        if (!windOk) r.push(`high wind (${w.windSpeed} km/h)`);
+        if (!rainOk)  r.push(`rain risk (${w.rainProbability}%)`);
+        if (!tempOk)  r.push(`unfavourable temp (${w.temperature}°C)`);
+        explanation = `Spraying is risky due to ${r.join(', ')}.`;
+        recommendation = 'Wait for calm, dry conditions — wind < 20 km/h and rain < 25%.';
       }
     } else {
-      // General planting
-      const rainOk = weather.rainProbability >= 30 && weather.rainProbability <= 80;
-      const stormRisk = weather.forecast === 'Thunderstorm' || weather.rainProbability > 85;
-      const tempOk = weather.temperature >= 15 && weather.temperature <= 32;
-      
+      const rainOk = w.rainProbability >= 30 && w.rainProbability <= 80;
+      const stormRisk = w.rainProbability > 85;
+      const tempOk = w.temperature >= 15 && w.temperature <= 32;
       checklist = [
-        { label: 'Soil Moisture / Rain (30% - 80%)', pass: rainOk && !stormRisk, value: `${weather.rainProbability}%` },
-        { label: 'Severe Weather Risk (No Storms)', pass: !stormRisk, value: weather.forecast },
-        { label: 'Germination Temp (15°C - 32°C)', pass: tempOk, value: `${weather.temperature}°C` }
+        { label: 'Soil Moisture — Rain (30–80%)', pass: rainOk && !stormRisk, value: `${w.rainProbability}%` },
+        { label: 'No Severe Storm Risk',          pass: !stormRisk, value: w.forecast },
+        { label: 'Germination Temp (15–32°C)',    pass: tempOk,     value: `${w.temperature}°C` },
       ];
-      
       safetyScore = (rainOk && !stormRisk ? 40 : 15) + (!stormRisk ? 40 : 0) + (tempOk ? 20 : 0);
-      
       if (!tempOk) {
-        directAnswer = 'Temperatures are unfavorable for planting.';
-        explanation = weather.temperature < 15 
-          ? `The temperature is too chilly (${weather.temperature}°C) for seed germination.` 
-          : `Extreme heat (${weather.temperature}°C) will stress young sprouts.`;
-        recommendation = 'Recommendation: Hold off planting until temperatures stabilize between 15°C and 32°C.';
+        directAnswer = 'Temperatures are unfavourable for planting.';
+        explanation = w.temperature < 15 ? `Too chilly (${w.temperature}°C) for germination.` : `Extreme heat (${w.temperature}°C) will stress seedlings.`;
+        recommendation = 'Hold off until temperature is between 15°C and 32°C.';
       } else if (stormRisk) {
         directAnswer = 'Do not plant seeds this weekend.';
-        explanation = `Heavy storms (${weather.forecast}) or high rainfall risks washing away seeds and eroding topsoil.`;
-        recommendation = 'Recommendation: Wait for severe weather alerts to clear before seeding.';
+        explanation = 'Heavy storm risk will wash seeds away and erode topsoil.';
+        recommendation = 'Wait for storm alerts to clear before planting.';
       } else if (rainOk) {
         directAnswer = 'Rain is expected over the weekend, providing good soil moisture.';
-        explanation = `Planting maize during this period is favorable.`;
+        explanation = 'Planting maize during this period is favorable.';
         recommendation = 'Recommended planting time:\nSaturday morning.';
       } else {
-        // Dry conditions
-        directAnswer = 'Planting is possible, but supplemental watering is required.';
-        explanation = `Low rain probability (${weather.rainProbability}%) means dry soil conditions, which may delay germination.`;
-        recommendation = 'Recommendation: Irrigate immediately after sowing if planting today.';
+        directAnswer = 'Planting is possible but supplemental watering is required.';
+        explanation = `Low rain probability (${w.rainProbability}%) means dry soil may delay germination.`;
+        recommendation = 'Irrigate immediately after sowing if planting today.';
       }
     }
-  } 
-  // 2. Beach / Swimming
-  else if (q.includes('beach') || q.includes('pool') || q.includes('swim') || q.includes('sunbathe')) {
+  } else if (q.includes('beach') || q.includes('swim') || q.includes('sunbathe')) {
     intent = 'Travel & Leisure';
-    const tempOk = weather.temperature >= 23;
-    const rainOk = weather.rainProbability <= 30;
-    const forecastOk = ['Sunny', 'Partly Cloudy'].includes(weather.forecast);
-    const uvHigh = weather.uvIndex >= 7;
-    
+    const tempOk = w.temperature >= 23, rainOk = w.rainProbability <= 30, skyOk = ['Sunny', 'Partly Cloudy'].includes(w.forecast);
     checklist = [
-      { label: 'Warm Temp (Min 23°C)', pass: tempOk, value: `${weather.temperature}°C` },
-      { label: 'Dry Weather (Max 30% Rain)', pass: rainOk, value: `${weather.rainProbability}%` },
-      { label: 'Sky Conditions (Sunny/Clear)', pass: forecastOk, value: weather.forecast }
+      { label: 'Warm Temp (min 23°C)',    pass: tempOk, value: `${w.temperature}°C` },
+      { label: 'Low Rain (max 30%)',       pass: rainOk, value: `${w.rainProbability}%` },
+      { label: 'Good Sky Conditions',      pass: skyOk,  value: w.forecast },
     ];
-    
-    safetyScore = (tempOk ? 45 : 10) + (rainOk ? 45 : 0) + (forecastOk ? 10 : 0);
-    
-    if (tempOk && rainOk && forecastOk) {
+    safetyScore = (tempOk ? 45 : 10) + (rainOk ? 45 : 0) + (skyOk ? 10 : 0);
+    if (tempOk && rainOk && skyOk) {
       directAnswer = 'Sunny conditions with low rainfall are expected.';
-      explanation = `This is a great time for beach activities.`;
-      recommendation = uvHigh 
-        ? `Recommendation:\nIdeal for travel and outdoor plans. Apply sunscreen (UV index: ${weather.uvIndex}).`
-        : 'Recommendation:\nIdeal for travel and outdoor plans.';
+      explanation = 'This is a great time for beach activities.';
+      recommendation = w.uvIndex >= 7 ? `Ideal for travel and outdoor plans.\nApply sunscreen — UV index is ${w.uvIndex}.` : 'Ideal for travel and outdoor plans.';
     } else {
-      directAnswer = 'Conditions are unfavorable for the beach.';
-      const factors: string[] = [];
-      if (!tempOk) factors.push(`chilly temperatures (${weather.temperature}°C)`);
-      if (!rainOk) factors.push(`high chance of rainfall (${weather.rainProbability}%)`);
-      if (!forecastOk) fillOutGloomyForecast(weather.forecast, factors);
-      
-      explanation = `Beach plans are impacted by ${factors.join(', and ')}.`;
-      recommendation = 'Recommendation: Consider indoor recreation or reschedule to a warmer day.';
+      directAnswer = 'Conditions are unfavourable for the beach.';
+      const f: string[] = [];
+      if (!tempOk) f.push(`cold temp (${w.temperature}°C)`);
+      if (!rainOk)  f.push(`high rain chance (${w.rainProbability}%)`);
+      if (!skyOk)   f.push(`gloomy sky (${w.forecast})`);
+      explanation = `Beach plans are impacted by ${f.join(', ')}.`;
+      recommendation = 'Consider indoor recreation or reschedule to a warmer day.';
     }
-  } 
-  // 3. Running / Sports / Hiking
-  else if (q.includes('run') || q.includes('sport') || q.includes('hike') || q.includes('hiking') || q.includes('marathon') || q.includes('football') || q.includes('soccer') || q.includes('tennis')) {
-    intent = 'Sports & Outdoor Activities';
-    const tempOk = weather.temperature >= 8 && weather.temperature <= 28;
-    const rainOk = weather.rainProbability <= 50;
-    const windOk = weather.windSpeed <= 35;
-    
+  } else if (q.includes('run') || q.includes('sport') || q.includes('hike') || q.includes('marathon')) {
+    intent = 'Sports & Outdoors';
+    const tempOk = w.temperature >= 8 && w.temperature <= 28, rainOk = w.rainProbability <= 50, windOk = w.windSpeed <= 35;
     checklist = [
-      { label: 'Comfortable Temp (8°C - 28°C)', pass: tempOk, value: `${weather.temperature}°C` },
-      { label: 'Low Rain Hazard (Max 50%)', pass: rainOk, value: `${weather.rainProbability}%` },
-      { label: 'Safe Wind Speeds (Max 35 km/h)', pass: windOk, value: `${weather.windSpeed} km/h` }
+      { label: 'Comfortable Temp (8–28°C)', pass: tempOk, value: `${w.temperature}°C` },
+      { label: 'Low Rain (max 50%)',         pass: rainOk, value: `${w.rainProbability}%` },
+      { label: 'Safe Wind (max 35 km/h)',    pass: windOk, value: `${w.windSpeed} km/h` },
     ];
-    
     safetyScore = (tempOk ? 40 : 10) + (rainOk ? 40 : 10) + (windOk ? 20 : 0);
-    
     if (tempOk && rainOk && windOk) {
       directAnswer = 'Weather conditions are ideal for outdoor training.';
-      explanation = `Moderate temperatures of ${weather.temperature}°C and low rain risk are pleasant for cardio.`;
-      recommendation = 'Recommendation: Favorable for running. Morning or evening slots are best.';
+      explanation = `Moderate temperature of ${w.temperature}°C and low rain risk make for comfortable cardio.`;
+      recommendation = 'Favorable for running. Morning or evening slots are best.';
     } else {
-      directAnswer = 'Outdoor activity is not advised.';
-      const hazards: string[] = [];
-      if (!tempOk) hazards.push(weather.temperature < 8 ? 'extreme cold' : 'excessive heat stroke risk');
-      if (!rainOk) hazards.push('slippery conditions due to rain');
-      if (!windOk) hazards.push('heavy winds making breathing/movement difficult');
-      
-      explanation = `Outdoor sports are compromised due to ${hazards.join(', and ')}.`;
-      recommendation = 'Recommendation: Opt for an indoor gym workout or treadmill session.';
+      directAnswer = 'Outdoor activity is not advised today.';
+      const h: string[] = [];
+      if (!tempOk) h.push(w.temperature < 8 ? 'extreme cold' : 'excessive heat');
+      if (!rainOk)  h.push('slippery conditions from rain');
+      if (!windOk)  h.push('strong winds');
+      explanation = `Outdoor sports compromised by ${h.join(', ')}.`;
+      recommendation = 'Opt for an indoor gym workout instead.';
     }
-  } 
-  // 4. Painting / Laundry / Daily Maintenance
-  else if (q.includes('paint') || q.includes('fence') || q.includes('wash') || q.includes('laundry') || q.includes('dry')) {
-    intent = 'Home & Daily Errands';
-    const rainOk = weather.rainProbability <= 20;
-    const tempOk = weather.temperature >= 12 && weather.temperature <= 35;
+  } else if (q.includes('paint') || q.includes('fence') || q.includes('wash') || q.includes('laundry')) {
+    intent = 'Home & Errands';
+    const rainOk = w.rainProbability <= 20, tempOk = w.temperature >= 12 && w.temperature <= 35;
     const isPainting = q.includes('paint') || q.includes('fence');
-    
     checklist = [
-      { label: 'Dry Weather (Max 20% Rain)', pass: rainOk, value: `${weather.rainProbability}%` },
-      { label: 'Ideal Temp (12°C - 35°C)', pass: tempOk, value: `${weather.temperature}°C` }
+      { label: 'Dry Weather (max 20% rain)', pass: rainOk, value: `${w.rainProbability}%` },
+      { label: 'Suitable Temp (12–35°C)',    pass: tempOk, value: `${w.temperature}°C` },
     ];
-    
     safetyScore = (rainOk ? 60 : 0) + (tempOk ? 40 : 10);
-    
     if (isPainting) {
       if (rainOk && tempOk) {
-        directAnswer = 'Favorable weather conditions for outdoor painting projects.';
-        explanation = `The warm temperature (${weather.temperature}°C) and zero rain risk allow the paint coat to cure evenly.`;
-        recommendation = 'Recommendation: Start painting by 9:00 AM to allow full daytime drying.';
+        directAnswer = 'Favourable conditions for outdoor painting.';
+        explanation = `Warm temperature (${w.temperature}°C) and no rain allows paint to cure evenly.`;
+        recommendation = 'Start painting by 9:00 AM for full daytime drying.';
       } else {
         directAnswer = 'Do not paint outdoors today.';
-        explanation = `Damp weather (${weather.rainProbability}% rain probability) or cold temperature will ruin paint adhesion.`;
-        recommendation = 'Recommendation: Reschedule painting tasks for a clear, dry day.';
+        explanation = 'Damp or cold weather will ruin paint adhesion and curing.';
+        recommendation = 'Reschedule for a clear, dry day.';
       }
     } else {
       if (rainOk) {
-        directAnswer = 'Excellent day to hang laundry or wash vehicles.';
-        explanation = `Low precipitation risk (${weather.rainProbability}%) and dry air will dry fabrics quickly.`;
-        recommendation = 'Recommendation: Hang laundry early. Favorable drying window: All day.';
+        directAnswer = 'Excellent day to hang laundry or wash your car.';
+        explanation = `Low precipitation risk (${w.rainProbability}%) and dry air will dry fabrics quickly.`;
+        recommendation = 'Hang laundry early — favorable drying window all day.';
       } else {
-        directAnswer = 'Postpone washing cars or hanging laundry outside.';
-        explanation = `Rain risk of ${weather.rainProbability}% means fabrics will remain damp and car finishes will get spotted.`;
-        recommendation = 'Recommendation: Use indoor drying racks or wait for a dry weather gap.';
+        directAnswer = 'Postpone washing or hanging laundry outside.';
+        explanation = `Rain risk of ${w.rainProbability}% means items will stay damp.`;
+        recommendation = 'Use indoor drying racks or wait for a dry weather gap.';
       }
     }
-  } 
-  // 5. Travel / Road Trips
-  else if (q.includes('travel') || q.includes('trip') || q.includes('drive') || q.includes('road')) {
-    intent = 'Travel & Tourism';
-    const severeRisk = weather.forecast === 'Thunderstorm' || weather.windSpeed >= 50 || weather.rainProbability >= 85;
-    
+  } else {
+    const nice = w.temperature >= 18 && w.temperature <= 26 && w.rainProbability < 40 && w.windSpeed < 30;
     checklist = [
-      { label: 'No Thunderstorms', pass: weather.forecast !== 'Thunderstorm', value: weather.forecast },
-      { label: 'Safe Wind Speeds (Max 50 km/h)', pass: weather.windSpeed < 50, value: `${weather.windSpeed} km/h` },
-      { label: 'Good Visibility (Rain < 85%)', pass: weather.rainProbability < 85, value: `${weather.rainProbability}%` }
+      { label: 'Mild Temp (18–26°C)',    pass: w.temperature >= 18 && w.temperature <= 26, value: `${w.temperature}°C` },
+      { label: 'Low Rain (< 40%)',        pass: w.rainProbability < 40, value: `${w.rainProbability}%` },
+      { label: 'Gentle Wind (< 30 km/h)', pass: w.windSpeed < 30,      value: `${w.windSpeed} km/h` },
     ];
-    
-    safetyScore = severeRisk ? 30 : 95;
-    
-    if (!severeRisk) {
-      directAnswer = 'Travel and driving conditions are normal.';
-      explanation = `No severe weather alerts are active. Roads should be clear and visibility normal.`;
-      recommendation = 'Recommendation: Safe for road trips. Practice defensive driving.';
-    } else {
-      directAnswer = 'Exercise high caution or reschedule travel.';
-      explanation = `Unstable conditions including ${weather.forecast === 'Thunderstorm' ? 'severe thunderstorms' : weather.windSpeed >= 50 ? 'gale force winds' : 'heavy rainfall and low visibility'} pose traffic hazards.`;
-      recommendation = 'Recommendation: Reschedule long commutes until storms pass.';
-    }
-  } 
-  // 6. General
-  else {
-    intent = 'Daily Planning';
-    const pleasant = weather.temperature >= 18 && weather.temperature <= 26 && weather.rainProbability < 40 && weather.windSpeed < 30;
-    
-    checklist = [
-      { label: 'Mild Temp (18°C - 26°C)', pass: weather.temperature >= 18 && weather.temperature <= 26, value: `${weather.temperature}°C` },
-      { label: 'Low Rain Chance (< 40%)', pass: weather.rainProbability < 40, value: `${weather.rainProbability}%` },
-      { label: 'Gentle Winds (< 30 km/h)', pass: weather.windSpeed < 30, value: `${weather.windSpeed} km/h` }
-    ];
-    
-    safetyScore = pleasant ? 90 : 60;
-    
-    if (pleasant) {
-      directAnswer = 'The weather is very pleasant for outdoor plans today.';
-      explanation = `The temperature is comfortable (${weather.temperature}°C) with low rain risk.`;
-      recommendation = 'Recommendation: Ideal for outdoor runs, errands, and walks.';
-    } else {
-      directAnswer = 'Weather conditions are unstable today.';
-      explanation = `Current metrics show ${weather.temperature < 15 ? 'chilly weather' : weather.temperature > 30 ? 'high heat' : ''} ${weather.rainProbability >= 50 ? 'with high rain chance' : ''} ${weather.windSpeed >= 30 ? 'with strong winds' : ''}.`;
-      recommendation = 'Recommendation: Plan indoor activities or carry appropriate weather gear.';
-    }
+    safetyScore = nice ? 90 : 60;
+    directAnswer = nice ? 'The weather is pleasant for outdoor plans.' : 'Weather conditions are mixed today.';
+    explanation = nice
+      ? `Comfortable at ${w.temperature}°C with low rain risk.`
+      : `Current conditions: ${w.temperature}°C, ${w.rainProbability}% rain, ${w.windSpeed} km/h wind.`;
+    recommendation = nice ? 'Great for errands, walks, and outdoor activities.' : 'Plan indoor activities or carry appropriate weather gear.';
   }
 
-  return {
-    intent,
-    safetyScore,
-    checklist,
-    directAnswer,
-    explanation,
-    recommendation
-  };
+  return { intent, safetyScore, checklist, directAnswer, explanation, recommendation };
 }
 
-function fillOutGloomyForecast(forecast: string, factors: string[]) {
-  factors.push(`gloomy sky conditions (${forecast})`);
-}
-
-// ============================================================================
-// Main Application Component
-// ============================================================================
+// ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  // Current simulated weather state
-  const [weather, setWeather] = useState<WeatherData>({
-    location: 'Nairobi (Farming Highlands)',
-    temperature: 21,
-    rainProbability: 75,
-    windSpeed: 12,
-    uvIndex: 6,
-    forecast: 'Showers'
-  });
+  const [launched, setLaunched] = useState(false);
 
-  // Chat message feed state
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      sender: 'copilot',
-      text: "Hello! I am WeatherAI Copilot, your intelligent decision assistant. Select a location preset or use the simulator panel to set weather conditions, then ask me anything about farming, beach plans, sports, painting, laundry, or travel. I will provide a clear weather-based recommendation.",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-  ]);
+  // Sandbox state (for landing page teaser)
+  const [sandboxTopic, setSandboxTopic] = useState<'farming' | 'beach' | 'painting'>('farming');
+  const [sandboxW, setSandboxW] = useState<Weather>({ location: '', temperature: 24, rainProbability: 15, windSpeed: 10, uvIndex: 5, forecast: 'Sunny' });
+  const sandboxQuery = sandboxTopic === 'farming' ? 'Can I plant maize this weekend?' : sandboxTopic === 'beach' ? 'Should I go to the beach this weekend?' : 'Can I paint my garden fence today?';
+  const sandboxResult = analyze(sandboxQuery, sandboxW);
 
-  // Current query input
-  const [inputVal, setInputVal] = useState('');
-  
-  // Is "AI" analyzing the query
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  // App (dashboard) state
+  const [weather, setWeather] = useState<Weather>(PRESETS[0]);
+  const [presetIdx, setPresetIdx] = useState(0);
+  const [messages, setMessages] = useState<Message[]>([{
+    id: 'init', from: 'bot', time: now(),
+    text: 'Hello! I\'m WeatherAI Copilot. Set your weather conditions using the simulator panel, then ask me any decision question — farming, beach, sports, home errands, and more.',
+  }]);
+  const [input, setInput] = useState('');
+  const [thinking, setThinking] = useState(false);
+  const [lastAnalysis, setLastAnalysis] = useState<Analysis | null>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
 
-  // Keep track of active preset location
-  const [activePresetIndex, setActivePresetIndex] = useState<number>(0);
-
-  // Keep track of the last query analysis to display in the right sidebar
-  const [lastAnalysis, setLastAnalysis] = useState<AnalysisResult | null>(null);
-
-  // Mobile sidebar states
-  const [isSimOpen, setIsSimOpen] = useState(false);
-  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
-
-  // Chat scroll anchor
-  const chatBottomRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to bottom of chat
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isAnalyzing]);
+    chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, thinking]);
 
-  // Handle preset clicks
-  const selectPresetLocation = (index: number) => {
-    setActivePresetIndex(index);
-    const preset = LOCATION_PRESETS[index];
-    setWeather(preset);
-  };
+  function now() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
-  // Synchronize manual adjustments with presets indicator (deselect if customized)
-  const handleSimAdjustment = <K extends keyof WeatherData>(key: K, value: WeatherData[K]) => {
-    setWeather(prev => {
-      const next = { ...prev, [key]: value };
-      // Check if this matches any preset exactly, otherwise set index to -1 (custom)
-      const matchingPresetIndex = LOCATION_PRESETS.findIndex(preset => 
-        preset.temperature === (key === 'temperature' ? value : preset.temperature) &&
-        preset.rainProbability === (key === 'rainProbability' ? value : preset.rainProbability) &&
-        preset.windSpeed === (key === 'windSpeed' ? value : preset.windSpeed) &&
-        preset.uvIndex === (key === 'uvIndex' ? value : preset.uvIndex) &&
-        preset.forecast === (key === 'forecast' ? value : preset.forecast)
-      );
-      setActivePresetIndex(matchingPresetIndex);
-      return next;
-    });
-  };
+  function selectPreset(i: number) {
+    setPresetIdx(i);
+    setWeather(PRESETS[i]);
+  }
 
-  // Submit a query
-  const handleQuerySubmit = (queryText: string) => {
-    if (!queryText.trim()) return;
-
-    // Add user message
-    const userMsgId = Date.now().toString();
-    const newUserMsg: Message = {
-      id: userMsgId,
-      sender: 'user',
-      text: queryText,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setMessages(prev => [...prev, newUserMsg]);
-    setInputVal('');
-    setIsAnalyzing(true);
-
-    // Mock processing delay to simulate real-time AI modeling
+  function sendMessage(q: string) {
+    if (!q.trim()) return;
+    setMessages(p => [...p, { id: Date.now().toString(), from: 'user', text: q, time: now() }]);
+    setInput('');
+    setThinking(true);
     setTimeout(() => {
-      const analysis = analyzeWeatherQuery(queryText, weather);
-      const responseText = `${analysis.directAnswer}\n\n${analysis.explanation}\n\n${analysis.recommendation}`;
-      
-      const copilotMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        sender: 'copilot',
-        text: responseText,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        analysis: analysis
-      };
+      const a = analyze(q, weather);
+      setLastAnalysis(a);
+      setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: '', time: now(), analysis: a }]);
+      setThinking(false);
+    }, 800);
+  }
 
-      setMessages(prev => [...prev, copilotMsg]);
-      setLastAnalysis(analysis);
-      setIsAnalyzing(false);
-      
-      // Auto-open analysis panel on larger displays, or alert for mobile
-      if (window.innerWidth < 1200) {
-        setIsInsightsOpen(true);
-      }
-    }, 900);
-  };
-
-  return (
-    <div className="flex flex-col min-h-screen text-slate-800 dark:text-slate-100 bg-slate-50 dark:bg-[#070913]">
-      
-      {/* Header Bar */}
-      <header className="sticky top-0 z-50 flex items-center justify-between px-6 py-4 border-b bg-white/70 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <CopilotIcon />
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold font-heading text-indigo-600 dark:text-indigo-400 m-0 tracking-tight leading-none">
-              WeatherAI Copilot
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-sans hidden sm:block">
-              Intelligent decision support based on micro-climates
-            </p>
+  // ── COPILOT DASHBOARD VIEW ──────────────────────────────────────────────────
+  if (launched) return (
+    <div className="app-page">
+      {/* App Header */}
+      <header className="app-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={() => setLaunched(false)}
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid var(--color-border)', background: 'var(--color-bg-soft)', fontSize: 12, fontWeight: 700, color: 'var(--color-text-muted)', cursor: 'pointer' }}
+          >← Back</button>
+          <div style={{ width: 1, height: 24, background: 'var(--color-border)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <BrandIcon />
+            <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 16, color: 'var(--color-text-heading)' }}>WeatherAI Copilot</span>
           </div>
         </div>
 
-        {/* Action Preset Buttons (Desktop) */}
-        <div className="hidden lg:flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-2">Presets:</span>
-          {LOCATION_PRESETS.map((preset, index) => (
-            <button
-              key={index}
-              onClick={() => selectPresetLocation(index)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all border ${
-                activePresetIndex === index
-                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                  : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              {preset.location.split(' ')[0]}
+        <div className="preset-pill-row" style={{ display: 'flex' }}>
+          {PRESETS.map((p, i) => (
+            <button key={i} className={`preset-pill ${presetIdx === i ? 'active' : ''}`} onClick={() => selectPreset(i)}>
+              {p.location.split('—')[0].trim()}
             </button>
           ))}
         </div>
-
-        {/* Mobile controls toggles */}
-        <div className="flex items-center gap-2 lg:hidden">
-          <button
-            onClick={() => { setIsSimOpen(!isSimOpen); setIsInsightsOpen(false); }}
-            className={`p-2 rounded-lg border text-xs font-medium transition-all ${
-              isSimOpen 
-                ? 'bg-indigo-600 border-indigo-600 text-white' 
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-            }`}
-          >
-            ☀️ Simulator
-          </button>
-          <button
-            onClick={() => { setIsInsightsOpen(!isInsightsOpen); setIsSimOpen(false); }}
-            className={`p-2 rounded-lg border text-xs font-medium transition-all ${
-              isInsightsOpen 
-                ? 'bg-indigo-600 border-indigo-600 text-white' 
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-            }`}
-            disabled={!lastAnalysis}
-          >
-            📊 Analysis {lastAnalysis ? '⚡' : ''}
-          </button>
-        </div>
       </header>
 
-      {/* Main Responsive Grid Dashboard */}
-      <main className="dashboard-layout">
-        
-        {/* =================================================================== */}
-        {/* LEFT COLUMN: Interactive Weather Simulator                         */}
-        {/* =================================================================== */}
-        <aside className={`glass-panel p-5 flex flex-col gap-6 ${
-          isSimOpen ? 'block fixed inset-x-4 top-20 bottom-4 z-40 bg-white dark:bg-slate-900 overflow-y-auto' : 'hidden md:flex'
-        }`}>
-          <div>
-            <h2 className="text-lg font-bold flex items-center justify-between text-slate-800 dark:text-slate-200 mb-2 border-b border-slate-200 dark:border-slate-800 pb-2">
-              <span>Weather Simulator</span>
-              <span className="text-xs bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 px-2.5 py-0.5 rounded-full font-semibold">
-                {activePresetIndex >= 0 ? 'Preset' : 'Manual'}
-              </span>
-            </h2>
-            <p className="text-xs text-slate-500">
-              Manually slide parameters to test how WeatherAI changes recommendation thresholds dynamically.
-            </p>
-          </div>
+      {/* Dashboard Grid */}
+      <div className="app-grid">
 
-          {/* Active Preset Info Display */}
-          <div className="flex items-center gap-4 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 p-4 rounded-xl">
-            <div className="p-2.5 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-100 dark:border-slate-800">
-              {renderWeatherIcon(weather.forecast)}
-            </div>
-            <div className="flex-grow min-w-0">
-              <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest block">Simulated Climate</span>
-              <span className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate block">{weather.location}</span>
-              <span className="text-xs text-slate-400 dark:text-slate-500 capitalize">{weather.forecast} Sky</span>
-            </div>
+        {/* Simulator Panel */}
+        <div className="app-panel app-simulator" style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="sim-header">
+            <div className="panel-title">Weather Simulator</div>
+            <div className="panel-desc">Adjust parameters to test AI decisions.</div>
           </div>
+          <div className="sim-body">
+            {/* Location chip */}
+            <div className="location-chip">
+              <div>{weatherIcon(weather.forecast)}</div>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Simulated Location</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-heading)' }}>{weather.location}</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{weather.forecast}</div>
+              </div>
+            </div>
 
-          {/* Simulation Sliders */}
-          <div className="flex flex-col gap-5">
-            {/* Forecast Select */}
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Forecast Sky State</label>
-              <select
-                value={weather.forecast}
-                onChange={(e) => handleSimAdjustment('forecast', e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg glass-input cursor-pointer"
-              >
-                <option value="Sunny">☀️ Sunny / Clear</option>
+            {/* Forecast select */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 6 }}>Forecast State</div>
+              <select className="select-field" value={weather.forecast} onChange={e => setWeather(p => ({ ...p, forecast: e.target.value, location: 'Custom Location' }))}>
+                <option value="Sunny">☀️ Sunny</option>
                 <option value="Partly Cloudy">⛅ Partly Cloudy</option>
-                <option value="Overcast">☁️ Overcast / Gloomy</option>
-                <option value="Showers">🌧️ Showers / Light Rain</option>
-                <option value="Thunderstorm">⛈️ Thunderstorm / Heavy Rain</option>
-                <option value="Windy">💨 Windy / Gales</option>
-                <option value="Chilly/Snowy">❄️ Chilly / Snowy</option>
+                <option value="Showers">🌧️ Showers</option>
+                <option value="Thunderstorm">⛈️ Thunderstorm</option>
+                <option value="Windy">💨 Windy</option>
               </select>
             </div>
 
-            {/* Temperature Slider */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Temperature</span>
-                <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{weather.temperature}°C</span>
-              </div>
-              <input
-                type="range"
-                min="-10"
-                max="45"
-                value={weather.temperature}
-                onChange={(e) => {
-                  handleSimAdjustment('temperature', parseInt(e.target.value));
-                  handleSimAdjustment('location', 'Custom Location (Modified)');
-                }}
-              />
-              <div className="flex justify-between text-[10px] text-slate-400">
-                <span>Freezing (-10°C)</span>
-                <span>Scorch (45°C)</span>
-              </div>
-            </div>
-
-            {/* Rain Probability Slider */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Rain Probability</span>
-                <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{weather.rainProbability}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={weather.rainProbability}
-                onChange={(e) => {
-                  handleSimAdjustment('rainProbability', parseInt(e.target.value));
-                  handleSimAdjustment('location', 'Custom Location (Modified)');
-                }}
-              />
-              <div className="flex justify-between text-[10px] text-slate-400">
-                <span>Arid (0%)</span>
-                <span>Deluge (100%)</span>
-              </div>
-            </div>
-
-            {/* Wind Speed Slider */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Wind Speed</span>
-                <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{weather.windSpeed} km/h</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="80"
-                value={weather.windSpeed}
-                onChange={(e) => {
-                  handleSimAdjustment('windSpeed', parseInt(e.target.value));
-                  handleSimAdjustment('location', 'Custom Location (Modified)');
-                }}
-              />
-              <div className="flex justify-between text-[10px] text-slate-400">
-                <span>Calm (0 km/h)</span>
-                <span>Gale (80 km/h)</span>
-              </div>
-            </div>
-
-            {/* UV Index Slider */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">UV Index</span>
-                <span className={`text-sm font-bold ${
-                  weather.uvIndex >= 8 ? 'text-red-500 dark:text-red-400 animate-uv-glow' : 'text-indigo-600 dark:text-indigo-400'
-                }`}>{weather.uvIndex}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="12"
-                value={weather.uvIndex}
-                onChange={(e) => {
-                  handleSimAdjustment('uvIndex', parseInt(e.target.value));
-                  handleSimAdjustment('location', 'Custom Location (Modified)');
-                }}
-              />
-              <div className="flex justify-between text-[10px] text-slate-400">
-                <span>Low (0)</span>
-                <span>Extreme (12)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick preset changer (Mobile Inside Simulator Drawer) */}
-          <div className="mt-auto pt-4 border-t border-slate-200 dark:border-slate-800 lg:hidden">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Preset Templates</span>
-            <div className="grid grid-cols-2 gap-2">
-              {LOCATION_PRESETS.map((preset, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    selectPresetLocation(index);
-                    setIsSimOpen(false);
-                  }}
-                  className={`px-3 py-2 text-xs font-medium rounded-lg border text-left transition-all ${
-                    activePresetIndex === index
-                      ? 'bg-indigo-600 border-indigo-600 text-white'
-                      : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 border-transparent text-slate-700 dark:text-slate-300'
-                  }`}
-                >
-                  {preset.location.split(' ')[0]}
-                </button>
-              ))}
-            </div>
-          </div>
-        </aside>
-
-        {/* =================================================================== */}
-        {/* CENTER COLUMN: WeatherAI Assistant Chat Feed                       */}
-        {/* =================================================================== */}
-        <section className="flex flex-col glass-panel min-h-[500px] h-[calc(100vh-120px)] overflow-hidden">
-          
-          {/* Chat Feed Window */}
-          <div className="flex-grow overflow-y-auto p-4 md:p-6 flex flex-col gap-6 scroll-smooth">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-3 max-w-[85%] chat-message-entry ${
-                  msg.sender === 'user' ? 'self-end flex-row-reverse' : 'self-start'
-                }`}
-              >
-                {/* Avatar Icon */}
-                <div className={`flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full border shadow-sm ${
-                  msg.sender === 'user'
-                    ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
-                    : 'bg-indigo-50 dark:bg-indigo-950 border-indigo-100 dark:border-indigo-900/50'
-                }`}>
-                  {msg.sender === 'user' ? <UserIcon /> : <CopilotIcon />}
+            {/* Sliders */}
+            {[
+              { label: 'Temperature', key: 'temperature' as const, min: -10, max: 45, unit: '°C' },
+              { label: 'Rain Probability', key: 'rainProbability' as const, min: 0, max: 100, unit: '%' },
+              { label: 'Wind Speed', key: 'windSpeed' as const, min: 0, max: 80, unit: ' km/h' },
+              { label: 'UV Index', key: 'uvIndex' as const, min: 0, max: 12, unit: '' },
+            ].map(({ label, key, min, max, unit }) => (
+              <div className="slider-row" key={key}>
+                <div className="slider-label-row">
+                  <span className="slider-label">{label}</span>
+                  <span className="slider-value">{weather[key]}{unit}</span>
                 </div>
+                <input type="range" min={min} max={max} value={weather[key]}
+                  onChange={e => setWeather(p => ({ ...p, [key]: parseInt(e.target.value), location: 'Custom Location' }))} />
+              </div>
+            ))}
+          </div>
+        </div>
 
-                {/* Message Bubble Wrapper */}
-                <div className="flex flex-col gap-1.5">
-                  <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
-                    msg.sender === 'user'
-                      ? 'bg-indigo-600 text-white rounded-tr-none shadow-md shadow-indigo-600/10'
-                      : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-150 dark:border-slate-800 rounded-tl-none shadow-sm'
-                  }`}>
-                    
-                    {/* Render Formatted Text (Direct Answer, Explanation, Recommendation) */}
-                    {msg.sender === 'copilot' ? (
-                      <div className="space-y-3 whitespace-pre-line">
-                        {/* If analysis metadata is attached, let's render it cleanly */}
-                        {msg.analysis ? (
-                          <>
-                            {/* Intent Badge */}
-                            <span className="inline-block text-[10px] uppercase tracking-wider font-bold bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full mb-1">
-                              {msg.analysis.intent}
-                            </span>
-                            
-                            {/* Direct Answer */}
-                            <div className="font-semibold text-slate-900 dark:text-white text-base">
-                              {msg.analysis.directAnswer}
-                            </div>
-                            
-                            {/* Explanation */}
-                            <div className="text-slate-600 dark:text-slate-300">
-                              {msg.analysis.explanation}
-                            </div>
-                            
-                            {/* Recommendation Highlight Box */}
-                            <div className="mt-2 p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 text-emerald-800 dark:text-emerald-300 rounded-xl font-medium text-xs leading-normal">
-                              {msg.analysis.recommendation}
-                            </div>
-                          </>
-                        ) : (
-                          // Fallback welcome message
-                          <div>{msg.text}</div>
-                        )}
+        {/* Chat Panel */}
+        <div className="app-panel app-chat">
+          {/* Message feed */}
+          <div className="chat-feed" ref={chatRef}>
+            {messages.map(msg => (
+              <div key={msg.id} className={`chat-row-full anim-msg ${msg.from}`}>
+                <div className="chat-avatar" style={{ background: msg.from === 'bot' ? 'var(--color-primary-light)' : 'var(--color-bg-soft)' }}>
+                  {msg.from === 'bot' ? <BotIcon /> : <UserAvatarIcon />}
+                </div>
+                <div>
+                  <div className="chat-bubble-full">
+                    {msg.analysis ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '2px 10px', borderRadius: 99, display: 'inline-block' }}>
+                          {msg.analysis.intent}
+                        </span>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-text-heading)' }}>{msg.analysis.directAnswer}</div>
+                        <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{msg.analysis.explanation}</div>
+                        <div style={{ padding: '10px 14px', background: 'var(--color-success-light)', border: '1px solid rgba(22,163,74,0.15)', borderRadius: 10, fontSize: 13, fontWeight: 700, color: 'var(--color-success)', whiteSpace: 'pre-line' }}>
+                          {msg.analysis.recommendation}
+                        </div>
                       </div>
-                    ) : (
-                      <div className="font-medium">{msg.text}</div>
-                    )}
+                    ) : msg.text}
                   </div>
-                  
-                  {/* Timestamp */}
-                  <span className={`text-[10px] text-slate-400 px-1 ${
-                    msg.sender === 'user' ? 'text-right' : 'text-left'
-                  }`}>
-                    {msg.timestamp}
-                  </span>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4, padding: '0 4px' }}>{msg.time}</div>
                 </div>
               </div>
             ))}
-
-            {/* Simulated Loading/Analyzing State */}
-            {isAnalyzing && (
-              <div className="flex gap-3 self-start max-w-[80%] chat-message-entry">
-                <div className="flex-shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-950 border border-indigo-100 dark:border-indigo-900/50 shadow-sm">
-                  <CopilotIcon />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="px-4 py-3.5 rounded-2xl rounded-tl-none bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 shadow-sm flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                      <span className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                      <span className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                    </div>
-                    <span className="text-xs text-slate-400 font-sans ml-1">Analyzing simulated atmospheric values...</span>
-                  </div>
+            {thinking && (
+              <div className="chat-row-full bot">
+                <div className="chat-avatar" style={{ background: 'var(--color-primary-light)' }}><BotIcon /></div>
+                <div className="typing-indicator">
+                  <div className="typing-dot d1" />
+                  <div className="typing-dot d2" />
+                  <div className="typing-dot d3" />
                 </div>
               </div>
             )}
-            <div ref={chatBottomRef} />
           </div>
 
-          {/* Suggested Prompts row */}
-          <div className="px-4 md:px-6 py-2 bg-slate-50/50 dark:bg-slate-950/20 border-t border-slate-100 dark:border-slate-900 overflow-x-auto flex items-center gap-2 no-scrollbar">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest shrink-0 mr-1">Ask:</span>
-            {QUICK_SUGGESTIONS.map((sug, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleQuerySubmit(sug.query)}
-                className="shrink-0 px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition-all shadow-sm font-sans"
-              >
-                {sug.label}
-              </button>
+          {/* Quick suggestions */}
+          <div className="chat-suggestion-bar">
+            <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', flexShrink: 0 }}>Ask:</span>
+            {SUGGESTIONS.map((s, i) => (
+              <button key={i} className="sug-btn" onClick={() => sendMessage(s.q)}>{s.label.split(' ')[1]}</button>
             ))}
           </div>
 
-          {/* Form Chat Input */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleQuerySubmit(inputVal);
-            }}
-            className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex gap-2"
-          >
+          {/* Input bar */}
+          <div className="chat-input-bar">
             <input
-              type="text"
-              value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              placeholder="Ask a decision question (e.g. Can I plant crops today?)"
-              className="flex-grow px-4 py-3 text-sm rounded-xl glass-input outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-sans"
-              disabled={isAnalyzing}
+              className="chat-input"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendMessage(input)}
+              placeholder="Ask a weather decision question..."
+              disabled={thinking}
             />
-            <button
-              type="submit"
-              disabled={!inputVal.trim() || isAnalyzing}
-              className="px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white font-medium text-sm transition-all shadow-md shadow-indigo-600/10 flex items-center gap-1.5 shrink-0"
-            >
-              <span>Analyze</span>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-              </svg>
+            <button className="chat-send-btn" onClick={() => sendMessage(input)} disabled={!input.trim() || thinking}>
+              Analyze →
             </button>
-          </form>
-        </section>
-
-        {/* =================================================================== */}
-        {/* RIGHT COLUMN: Intent Analyst & Thresholds Metrics Dashboard        */}
-        {/* =================================================================== */}
-        <aside className={`insights-panel glass-panel p-5 flex flex-col gap-6 ${
-          isInsightsOpen ? 'block fixed inset-x-4 top-20 bottom-4 z-40 bg-white dark:bg-slate-900 overflow-y-auto' : 'hidden xl:flex'
-        }`}>
-          <div>
-            <h2 className="text-lg font-bold flex items-center justify-between text-slate-800 dark:text-slate-200 mb-2 border-b border-slate-200 dark:border-slate-800 pb-2">
-              <span>Decision Analyst</span>
-              <span className="text-xs bg-indigo-50 dark:bg-indigo-950 text-indigo-500 px-2 py-0.5 rounded-full font-bold animate-pulse">
-                Live Insights
-              </span>
-            </h2>
-            <p className="text-xs text-slate-500">
-              Real-time audit log of safety limits, moisture indices, and intent matching rules.
-            </p>
           </div>
+        </div>
 
+        {/* Audit Panel */}
+        <div className="app-panel app-insights" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
+          <div>
+            <div className="panel-title">Decision Audit</div>
+            <div className="panel-desc">Threshold check results from last query.</div>
+          </div>
           {lastAnalysis ? (
-            <div className="flex flex-col gap-5">
-              {/* Intent classification summary */}
-              <div className="p-4 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200/50 dark:border-slate-800">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Matched Intent Category</span>
-                <span className="text-sm font-extrabold text-slate-800 dark:text-slate-200 mt-1 block">
-                  {lastAnalysis.intent}
-                </span>
+            <>
+              <div style={{ padding: '10px 14px', background: 'var(--color-bg-soft)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 4 }}>Intent</div>
+                <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--color-text-heading)' }}>{lastAnalysis.intent}</div>
               </div>
-
-              {/* Safety Score Meter */}
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center text-xs font-bold text-slate-500">
-                  <span>SAFETY INDEX</span>
-                  <span className={`font-mono text-sm font-extrabold ${
-                    lastAnalysis.safetyScore >= 75 ? 'text-emerald-500' : lastAnalysis.safetyScore >= 40 ? 'text-amber-500' : 'text-rose-500'
-                  }`}>
-                    {lastAnalysis.safetyScore} / 100
-                  </span>
+              <div className="safety-bar-row">
+                <div className="safety-bar-label-row">
+                  <span>Safety Index</span>
+                  <span style={{ color: lastAnalysis.safetyScore >= 75 ? 'var(--color-success)' : lastAnalysis.safetyScore >= 40 ? 'var(--color-warning)' : 'var(--color-danger)', fontWeight: 800 }}>{lastAnalysis.safetyScore}%</span>
                 </div>
-                <div className="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      lastAnalysis.safetyScore >= 75 ? 'bg-emerald-500' : lastAnalysis.safetyScore >= 40 ? 'bg-amber-500' : 'bg-rose-500'
-                    }`}
-                    style={{ width: `${lastAnalysis.safetyScore}%` }}
-                  />
+                <div className="safety-bar-track">
+                  <div className={`safety-bar-fill ${lastAnalysis.safetyScore >= 75 ? 'safety-high' : lastAnalysis.safetyScore >= 40 ? 'safety-mid' : 'safety-low'}`} style={{ width: `${lastAnalysis.safetyScore}%` }} />
                 </div>
-                <span className="text-[10px] text-slate-400 italic">
-                  {lastAnalysis.safetyScore >= 75 
-                    ? '✓ Environment satisfies all threshold criteria.' 
-                    : lastAnalysis.safetyScore >= 40 
-                      ? '⚠ Moderate risk constraints flagged in weather profile.' 
-                      : '✗ Warning: Crucial weather safety criteria failed.'
-                  }
-                </span>
               </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>Parameter Checks</div>
+                {lastAnalysis.checklist.map((c, i) => (
+                  <div key={i} className="checklist-item">
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>{c.label}</span>
+                    <span className={`pass-badge ${c.pass ? 'pass' : 'fail'}`}>{c.value} {c.pass ? '✓' : '✗'}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-muted)', fontSize: 13 }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>📋</div>
+              <div style={{ fontWeight: 600 }}>No query yet</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>Send a question to see the audit trail.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
-              {/* Metrics Evaluated checklist */}
-              <div className="flex flex-col gap-3">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Checked Threshold Parameters</span>
-                <div className="flex flex-col gap-2">
-                  {lastAnalysis.checklist.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3 rounded-lg bg-slate-100/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/80 text-xs"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        {item.pass ? (
-                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-[10px]">
-                            ✓
-                          </span>
-                        ) : (
-                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 flex items-center justify-center font-bold text-[10px]">
-                            ✕
-                          </span>
-                        )}
-                        <span className="text-slate-600 dark:text-slate-300 font-medium">{item.label}</span>
+  // ── LANDING PAGE ─────────────────────────────────────────────────────────────
+  return (
+    <div className="page-wrap">
+
+      {/* ── Navbar ── */}
+      <nav className="navbar">
+        <div className="container">
+          <div className="navbar-inner">
+            <div className="navbar-brand">
+              <BrandIcon />
+              WeatherAI Copilot
+            </div>
+            <ul className="navbar-links">
+              <li><a href="#features">Features</a></li>
+              <li><a href="#demo">Sandbox Demo</a></li>
+              <li><a href="#testimonials">Testimonials</a></li>
+            </ul>
+            <button className="btn btn-primary btn-sm" onClick={() => setLaunched(true)}>
+              Launch Copilot →
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Hero ── */}
+      <section className="hero">
+        <div className="container">
+          <div className="hero-inner">
+            {/* Left: text */}
+            <div>
+              <div className="hero-badge">⚡ Next-Gen Meteorology Intelligence</div>
+              <h1 className="hero-title">
+                Weather Decisions,<br />
+                <span className="gradient-text">Powered by AI</span>
+              </h1>
+              <p className="hero-desc">
+                WeatherAI Copilot translates atmospheric data into clear, actionable advice. Plan planting cycles, beach trips, fitness sessions, and home maintenance with total confidence.
+              </p>
+              <div className="hero-ctas">
+                <button className="btn btn-primary" onClick={() => setLaunched(true)}>Get Started Free</button>
+                <a href="#demo" className="btn btn-outline">Try Live Sandbox</a>
+              </div>
+            </div>
+
+            {/* Right: floating mock chat card */}
+            <div className="anim-float">
+              <div className="hero-card">
+                <div className="hero-card-badge">Farming Intent Matched</div>
+                {/* User message */}
+                <div className="chat-row user-row">
+                  <div className="chat-avatar"><UserAvatarIcon /></div>
+                  <div className="chat-bubble user-bubble">Can I plant maize this weekend?</div>
+                </div>
+                {/* Bot message */}
+                <div className="chat-row">
+                  <div className="chat-avatar" style={{ background: 'var(--color-primary-light)' }}><BotIcon /></div>
+                  <div className="chat-bubble bot-bubble">
+                    <div className="answer">Rain is expected over the weekend, providing good soil moisture.</div>
+                    <div>Planting maize during this period is favorable.</div>
+                    <div className="recommendation">Recommended planting time:<br />Saturday morning.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Features ── */}
+      <section id="features" className="section section-alt">
+        <div className="container">
+          <div className="section-head">
+            <span className="section-label">Intelligent Domains</span>
+            <h2 className="section-title">Designed for Real-World Decisions</h2>
+            <p className="section-desc">Data is meaningless without direction. WeatherAI focuses on the outcomes of your day — not just numbers and charts.</p>
+          </div>
+          <div className="features-grid">
+            {[
+              { icon: '🌾', title: 'Farming & Agriculture', color: '#d1fae5', iconColor: '#16a34a', desc: 'Determine optimal planting times based on moisture trends, and check wind-safety limits before spraying crops.' },
+              { icon: '🏖️', title: 'Travel & Leisure',      color: '#fef3c7', iconColor: '#d97706', desc: 'Validate beach conditions, flag high UV index days, and assess visibility for road trips and outdoor holidays.' },
+              { icon: '🏃', title: 'Sports & Training',     color: '#dbeafe', iconColor: '#2563eb', desc: 'Check temperature ranges, precipitation hazards, and wind to keep your running, hiking, and sports sessions safe.' },
+              { icon: '🏠', title: 'Home & Maintenance',    color: '#f3e8ff', iconColor: '#7c3aed', desc: 'Verify moisture thresholds before painting walls, check drying windows for laundry, and plan outdoor projects.' },
+            ].map(f => (
+              <div className="feature-card" key={f.title}>
+                <div className="feature-icon-wrap" style={{ background: f.color }}>
+                  <span style={{ fontSize: 22 }}>{f.icon}</span>
+                </div>
+                <div className="feature-title">{f.title}</div>
+                <div className="feature-desc">{f.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Sandbox Demo ── */}
+      <section id="demo" className="section">
+        <div className="container">
+          <div style={{ marginBottom: 48 }}>
+            <span className="section-label">Interactive Teaser</span>
+            <h2 className="section-title">Tweak the Sandbox. Witness the Decision.</h2>
+            <p className="section-desc">Slide the controls to adjust simulated weather conditions and watch the AI recommendation update instantly.</p>
+          </div>
+          <div className="sandbox-grid">
+            {/* Controls */}
+            <div className="sandbox-panel">
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 10 }}>1. Select Your Query</div>
+                <div className="sandbox-topic-row">
+                  {(['farming', 'beach', 'painting'] as const).map(t => (
+                    <button key={t} className={`topic-btn ${sandboxTopic === t ? 'active' : ''}`} onClick={() => setSandboxTopic(t)}>
+                      {t === 'farming' ? '🌾 Maize Planting' : t === 'beach' ? '🏖️ Beach Trip' : '🎨 Wall Painting'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 20 }}>
+                <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 16 }}>2. Tune Environment</div>
+                <div className="slider-group">
+                  {[
+                    { label: 'Rain Probability', key: 'rainProbability' as const, min: 0, max: 100, unit: '%' },
+                    { label: 'Temperature',      key: 'temperature'    as const, min: -10, max: 45, unit: '°C' },
+                    { label: 'Wind Speed',       key: 'windSpeed'      as const, min: 0, max: 80, unit: ' km/h' },
+                  ].map(({ label, key, min, max, unit }) => (
+                    <div className="slider-row" key={key}>
+                      <div className="slider-label-row">
+                        <span className="slider-label">{label}</span>
+                        <span className="slider-value">{sandboxW[key]}{unit}</span>
                       </div>
-                      <span className="font-bold font-mono text-slate-800 dark:text-slate-200">
-                        {item.value}
-                      </span>
+                      <input type="range" min={min} max={max} value={sandboxW[key]}
+                        onChange={e => setSandboxW(p => ({ ...p, [key]: parseInt(e.target.value) }))} />
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-          ) : (
-            // Empty State
-            <div className="flex flex-col items-center justify-center py-10 text-center gap-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
-              <svg className="w-12 h-12 text-slate-300 dark:text-slate-700 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
-              </svg>
-              <div className="px-4">
-                <span className="text-sm font-bold text-slate-500 block mb-1">No Query Analyzed Yet</span>
-                <span className="text-xs text-slate-400">
-                  Ask a question in the chat room to display the AI safety checklist audit trail.
-                </span>
+
+            {/* Result card */}
+            <div className="result-card">
+              <div className="result-header">
+                <div className="result-header-left">
+                  <BotIcon />
+                  WeatherAI Recommendation
+                </div>
+                <span className="intent-tag">{sandboxResult.intent}</span>
+              </div>
+              <div className="result-answer">{sandboxResult.directAnswer}</div>
+              <div className="result-explanation">{sandboxResult.explanation}</div>
+              <div className="result-rec">{sandboxResult.recommendation}</div>
+              <div className="safety-bar-row">
+                <div className="safety-bar-label-row">
+                  <span>Safety Index</span>
+                  <span style={{ color: sandboxResult.safetyScore >= 75 ? 'var(--color-success)' : sandboxResult.safetyScore >= 40 ? 'var(--color-warning)' : 'var(--color-danger)', fontWeight: 800 }}>
+                    {sandboxResult.safetyScore}%
+                  </span>
+                </div>
+                <div className="safety-bar-track">
+                  <div className={`safety-bar-fill ${sandboxResult.safetyScore >= 75 ? 'safety-high' : sandboxResult.safetyScore >= 40 ? 'safety-mid' : 'safety-low'}`} style={{ width: `${sandboxResult.safetyScore}%` }} />
+                </div>
               </div>
             </div>
-          )}
+          </div>
+        </div>
+      </section>
 
-          {/* Close Panel Button (Mobile Drawer) */}
-          <button
-            onClick={() => setIsInsightsOpen(false)}
-            className="w-full mt-auto py-2.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 lg:hidden hover:bg-slate-200"
-          >
-            Close Analyst View
-          </button>
-        </aside>
-      </main>
+      {/* ── Testimonials ── */}
+      <section id="testimonials" className="section section-alt">
+        <div className="container">
+          <div className="section-head">
+            <span className="section-label">Trusted User Voice</span>
+            <h2 className="section-title">Loved by Action-Takers</h2>
+            <p className="section-desc">See how farmers, athletes, and contractors use WeatherAI to remove guesswork from their decisions.</p>
+          </div>
+          <div className="testimonials-grid">
+            {[
+              { initials: 'EO', name: 'Erick Ouma', role: 'Maize Farmer, Rift Valley', text: '"WeatherAI Copilot checks exact wind-safety parameters and tells us precisely when to spray. We\'ve saved thousands in wasted pesticides since switching."' },
+              { initials: 'JH', name: 'Jessica Hansen', role: 'Trail Runner, Cape Town',  text: '"Normal weather apps say \'22 degrees\'. WeatherAI checks crosswind limits and trail moisture, telling me whether my 3-hour run is safe. Outstanding."' },
+              { initials: 'ML', name: 'Marcus L.',    role: 'Paint Contractor, Miami',    text: '"We used to cancel shifts prematurely. Now we use the drying constraints on WeatherAI to know exactly when our crew can start painting safely."' },
+            ].map(t => (
+              <div className="testimonial-card" key={t.initials}>
+                <p className="testimonial-text">{t.text}</p>
+                <div className="testimonial-author">
+                  <div className="author-avatar">{t.initials}</div>
+                  <div>
+                    <div className="author-name">{t.name}</div>
+                    <div className="author-role">{t.role}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA Banner ── */}
+      <section className="cta-banner">
+        <div className="container">
+          <div className="cta-card">
+            <h2 className="cta-title">Ready to Make Smarter Weather Decisions?</h2>
+            <p className="cta-desc">Open WeatherAI Copilot, tune the simulator, ask your decision question, and get a precise recommendation instantly.</p>
+            <button className="btn btn-white" onClick={() => setLaunched(true)} style={{ position: 'relative', zIndex: 1 }}>
+              Launch Copilot Free →
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ── */}
+      <footer className="footer">
+        <div className="container">
+          <div className="footer-grid">
+            <div className="footer-brand">
+              <div className="navbar-brand"><BrandIcon /> WeatherAI Copilot</div>
+              <p>Making complex weather data clear, context-aware, and actionable for your day-to-day decisions.</p>
+            </div>
+            <div>
+              <div className="footer-col-title">Product</div>
+              <ul className="footer-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#demo">Sandbox Preview</a></li>
+                <li><button onClick={() => setLaunched(true)}>Launch Copilot</button></li>
+              </ul>
+            </div>
+            <div>
+              <div className="footer-col-title">Resources</div>
+              <ul className="footer-links">
+                <li><a href="#">Farming Advice</a></li>
+                <li><a href="#">Travel Guidelines</a></li>
+                <li><a href="#">API Docs</a></li>
+              </ul>
+            </div>
+            <div>
+              <div className="footer-col-title">Community</div>
+              <ul className="footer-links">
+                <li><a href="https://github.com/Eng-Kiman-ichege/Weather-assistant" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+                <li><a href="#">Twitter / X</a></li>
+                <li><a href="#">Discord</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="footer-bottom">
+            <span>© {new Date().getFullYear()} WeatherAI Copilot. All rights reserved.</span>
+            <div className="footer-bottom-links">
+              <a href="#">Privacy Policy</a>
+              <a href="#">Terms of Service</a>
+            </div>
+          </div>
+        </div>
+      </footer>
+
     </div>
   );
 }
