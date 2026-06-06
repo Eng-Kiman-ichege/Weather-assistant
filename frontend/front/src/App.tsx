@@ -261,7 +261,15 @@ function analyze(query: string, w: Weather): Analysis {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
+  const openRouterEnabled = Boolean(import.meta.env.VITE_OPENROUTER_API_KEY);
+  const weatherApiEnabled = Boolean(import.meta.env.VITE_WEATHER_API_KEY);
+  const openRouterModel = import.meta.env.VITE_OPENROUTER_MODEL ?? 'nvidia/nemotron-3-super-120b-a12b:free';
+
   const [launched, setLaunched] = useState(false);
+  const [liveLocation, setLiveLocation] = useState('Nairobi');
+  const [weatherSource, setWeatherSource] = useState<'simulated' | 'live'>('simulated');
+  const [aiMode, setAiMode] = useState<'local' | 'remote'>(openRouterEnabled ? 'remote' : 'local');
+  const [liveStatus, setLiveStatus] = useState('');
 
   // Sandbox state (for landing page teaser)
   const [sandboxTopic, setSandboxTopic] = useState<'farming' | 'beach' | 'painting'>('farming');
@@ -317,7 +325,6 @@ export default function App() {
     setMessages(p => [...p, { id: Date.now().toString(), from: 'user', text: q, time: now() }]);
     setInput('');
     setThinking(true);
-    setAiResponse(null);
 
     const analysis = analyze(q, weather);
     setLastAnalysis(analysis);
@@ -325,7 +332,6 @@ export default function App() {
     if (openRouterEnabled && aiMode === 'remote') {
       try {
         const remoteText = await createAiSuggestion(q, weather);
-        setAiResponse(remoteText);
         setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: remoteText || analysis.directAnswer, time: now(), analysis }]);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'OpenRouter failed.';
@@ -382,9 +388,37 @@ export default function App() {
             <div className="location-chip">
               <div>{weatherIcon(weather.forecast)}</div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Simulated Location</div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{weatherSource === 'live' ? 'Live Weather' : 'Simulated Location'}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-heading)' }}>{weather.location}</div>
                 <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{weather.forecast}</div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 20, display: 'grid', gap: 12, padding: '14px', borderRadius: 16, background: 'var(--color-bg-soft)', border: '1px solid var(--color-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>Weather source</span>
+                <span style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 999, padding: '6px 12px', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                  {weatherSource === 'live' ? 'Live data' : 'Simulated data'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <input
+                  className="chat-input"
+                  value={liveLocation}
+                  onChange={e => setLiveLocation(e.target.value)}
+                  placeholder="Enter city or region"
+                  style={{ flex: 1, minWidth: 160, background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}
+                />
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={loadLiveWeather}
+                  disabled={!weatherApiEnabled}
+                >
+                  Fetch live forecast
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: weatherApiEnabled ? 'var(--color-text-muted)' : 'var(--color-danger)' }}>
+                {liveStatus || (weatherApiEnabled ? 'Live weather will update the simulator values.' : 'Configure VITE_WEATHER_API_KEY to enable live weather fetches.')}
               </div>
             </div>
 
@@ -421,6 +455,27 @@ export default function App() {
 
         {/* Chat Panel */}
         <div className="app-panel app-chat">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, marginBottom: 18 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 6 }}>AI Suggestion Engine</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-heading)' }}>{openRouterEnabled ? openRouterModel : 'Local inference only'}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                className={`btn btn-sm ${aiMode === 'local' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => setAiMode('local')}
+              >
+                Local decision engine
+              </button>
+              <button
+                className={`btn btn-sm ${aiMode === 'remote' ? 'btn-primary' : 'btn-outline'}`}
+                onClick={() => setAiMode('remote')}
+                disabled={!openRouterEnabled}
+              >
+                OpenRouter AI
+              </button>
+            </div>
+          </div>
           {/* Message feed */}
           <div className="chat-feed" ref={chatRef}>
             {messages.map(msg => (
