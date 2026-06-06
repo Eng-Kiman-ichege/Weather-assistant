@@ -189,30 +189,30 @@ function WeatherSummaryBlock({ weather }: { weather: Weather | null }) {
         {weather ? [
           {
             label: 'Temperature',
-            value: `${weather.temperature}°C`,
+            value: `${weather.temperature ?? 0}°C`,
             hint: 'Air temperature',
-            percent: Math.min(100, Math.max(0, ((weather.temperature + 10) / 55) * 100)),
+            percent: Math.min(100, Math.max(0, (((weather.temperature ?? 0) + 10) / 55) * 100)),
             color: 'linear-gradient(90deg, #f59e0b, #fbbf24)',
           },
           {
             label: 'Rain chance',
-            value: `${weather.rainProbability}%`,
+            value: `${weather.rainProbability ?? 0}%`,
             hint: 'Precipitation likelihood',
-            percent: weather.rainProbability,
+            percent: weather.rainProbability ?? 0,
             color: 'linear-gradient(90deg, #3b82f6, #60a5fa)',
           },
           {
             label: 'Wind speed',
-            value: `${weather.windSpeed} km/h`,
+            value: `${weather.windSpeed ?? 0} km/h`,
             hint: 'Surface wind',
-            percent: Math.min(100, (weather.windSpeed / 80) * 100),
+            percent: Math.min(100, ((weather.windSpeed ?? 0) / 80) * 100),
             color: 'linear-gradient(90deg, #06b6d4, #22d3ee)',
           },
           {
             label: 'UV index',
-            value: `${weather.uvIndex}`,
+            value: `${weather.uvIndex ?? 0}`,
             hint: 'Sun exposure risk',
-            percent: Math.min(100, (weather.uvIndex / 12) * 100),
+            percent: Math.min(100, ((weather.uvIndex ?? 0) / 12) * 100),
             color: 'linear-gradient(90deg, #a855f7, #c084fc)',
           },
         ].map((stat, idx) => (

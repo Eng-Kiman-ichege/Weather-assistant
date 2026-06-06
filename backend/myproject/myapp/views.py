@@ -49,6 +49,23 @@ def _post_json(url: str, payload: dict, headers: dict) -> dict:
             return json.loads(body)
 
 
+def _safe_float(value: object) -> float:
+    try:
+        if value is None:
+            return 0.0
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _safe_string(value: object, fallback: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, dict):
+        return value.get('name') or value.get('display_name') or value.get('label') or value.get('region') or fallback
+    return str(value) if value is not None else fallback
+
+
 def _geocode_location(location: str) -> dict | None:
     headers = {'User-Agent': 'WeatherAI/1.0'}
     nominatim_url = f"https://nominatim.openstreetmap.org/search?format=json&q={urllib.parse.quote(location)}&limit=1"
@@ -139,15 +156,23 @@ def weather_view(request):
         except Exception as exc:
             return HttpResponseServerError(f'Failed to fetch weather: {exc}')
 
-    raw_location = data.get('location', location)
-    normalized_location = location
-    if isinstance(raw_location, str):
-        normalized_location = raw_location
-    elif isinstance(raw_location, dict):
-        normalized_location = raw_location.get('name') or raw_location.get('display_name') or location
+        raw_location = data.get('location', location)
+        normalized_location = _safe_string(raw_location, location)
 
-    return JsonResponse({
-        'location': normalized_location,
+        temperature = _safe_float(data.get('temperature', data.get('temp')))
+        rain_probability = _safe_float(data.get('rainProbability', data.get('precipitationChance')))
+        wind_speed = _safe_float(data.get('windSpeed', data.get('wind_speed')))
+        uv_index = _safe_float(data.get('uvIndex', data.get('uv_index')))
+        forecast_value = data.get('forecast', data.get('summary'))
+        forecast = _safe_string(forecast_value, 'Partly Cloudy')
+
+        return JsonResponse({
+            'location': normalized_location,
+            'temperature': temperature,
+            'rainProbability': rain_probability,
+            'windSpeed': wind_speed,
+            'uvIndex': uv_index,
+            'forecast': forecast,
         })
 
     coords = _geocode_location(location)
