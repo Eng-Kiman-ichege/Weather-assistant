@@ -227,6 +227,7 @@ function WeatherSummaryBlock({ weather }: { weather: Weather | null }) {
             <div className="weather-stat-bar">
               <div className="weather-stat-track">
                 <div className="weather-stat-fill" style={{ width: `${stat.percent}%`, background: stat.color }} />
+                <div className="weather-stat-thumb" style={{ left: `${stat.percent}%`, background: stat.color }} />
               </div>
               <div className="weather-stat-bar-meta">
                 <span className="weather-stat-bar-text">Trend</span>
@@ -365,9 +366,12 @@ const SUGGESTIONS = [
 // ─── Decision Engine ──────────────────────────────────────────────────────────
 function analyze(query: string, w: Weather): Analysis {
   const q = query.toLowerCase();
-  let intent = 'Daily Planning', directAnswer = '', explanation = '', recommendation = '';
-  let safetyScore = 80;
-  let checklist: CheckItem[] = [];
+  let intent = 'Daily Planning';
+  let directAnswer: string;
+  let explanation: string;
+  let recommendation: string;
+  let safetyScore: number;
+  let checklist: CheckItem[];
 
   if (q.includes('plant') || q.includes('maize') || q.includes('farm') || q.includes('seed') || q.includes('crop') || q.includes('spray') || q.includes('pesticide')) {
     intent = 'Agriculture & Farming';
@@ -632,7 +636,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    loadWeather(PRESETS[0].location, PRESETS[0].latitude, PRESETS[0].longitude);
+    const init = async () => {
+      await loadWeather(PRESETS[0].location, PRESETS[0].latitude, PRESETS[0].longitude);
+    };
+
+    void init();
   }, []);
 
   async function sendMessage(q: string) {
@@ -958,7 +966,7 @@ export default function App() {
           </div>
         </div>
 
-      </div>{/* /app-grid */}
+      </div>
       ) : (
         <div className="route-screen">
           <div className="route-screen-title">
