@@ -721,10 +721,60 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.25); }
   opacity: 0.7;
 }
 
+.app-header-nav {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.app-nav-link {
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.app-nav-link:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--color-text-heading);
+}
+
+.app-nav-link.active {
+  color: var(--color-primary);
+  border-color: rgba(99, 102, 241, 0.24);
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.route-screen {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 20px;
+  min-height: calc(100vh - 108px);
+  box-sizing: border-box;
+}
+
+.route-screen-title {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.route-screen-subtitle {
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
 /* ─── App Grid ─── */
 .app-grid {
   display: grid;
-  grid-template-columns: 300px 1fr 290px;
+  grid-template-columns: 340px minmax(0, 1fr) 240px;
   gap: 20px;
   padding: 20px;
   flex: 1;

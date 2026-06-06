@@ -794,17 +794,6 @@ export default function App() {
               onZoomOut={() => setMapZoom(z => Math.max(3, z - 1))}
             />
             <WeatherSummaryBlock weather={weather} />
-            <RoutePlannerPanel
-              routeStart={routeStart}
-              routeEnd={routeEnd}
-              routeStatus={routeStatus}
-              routeWeather={routeWeather}
-              routeCoords={routeCoords}
-              mapZoom={mapZoom}
-              onRouteStartChange={setRouteStart}
-              onRouteEndChange={setRouteEnd}
-              onPlanRoute={loadRouteWeather}
-            />
           </div>
         </div>
 
@@ -970,31 +959,51 @@ export default function App() {
         </div>
 
       </div>{/* /app-grid */}
+      ) : (
+        <div className="route-screen">
+          <div className="route-screen-title">
+            <div className="panel-title">Route Planner</div>
+            <div className="route-screen-subtitle">Plan journeys on a dedicated page and compare weather at each waypoint.</div>
+          </div>
+          <RoutePlannerPanel
+            routeStart={routeStart}
+            routeEnd={routeEnd}
+            routeStatus={routeStatus}
+            routeWeather={routeWeather}
+            routeCoords={routeCoords}
+            mapZoom={mapZoom}
+            onRouteStartChange={setRouteStart}
+            onRouteEndChange={setRouteEnd}
+            onPlanRoute={loadRouteWeather}
+          />
+        </div>
+      )}
 
-      {/* Sleek Mobile Bottom Navigation */}
-      <div className="mobile-nav">
-        <button
-          className={`mobile-nav-btn ${activePanel === 'simulator' ? 'active' : ''}`}
-          onClick={() => setActivePanel('simulator')}
-        >
-          <span className="mobile-nav-icon">🎛️</span>
-          <span className="mobile-nav-label">Simulator</span>
-        </button>
-        <button
-          className={`mobile-nav-btn ${activePanel === 'chat' ? 'active' : ''}`}
-          onClick={() => setActivePanel('chat')}
-        >
-          <span className="mobile-nav-icon">💬</span>
-          <span className="mobile-nav-label">Copilot</span>
-        </button>
-        <button
-          className={`mobile-nav-btn ${activePanel === 'insights' ? 'active' : ''}`}
-          onClick={() => setActivePanel('insights')}
-        >
-          <span className="mobile-nav-icon">📊</span>
-          <span className="mobile-nav-label">Audit</span>
-        </button>
-      </div>
+      {activePage === 'dashboard' && (
+        <div className="mobile-nav">
+          <button
+            className={`mobile-nav-btn ${activePanel === 'simulator' ? 'active' : ''}`}
+            onClick={() => setActivePanel('simulator')}
+          >
+            <span className="mobile-nav-icon">🎛️</span>
+            <span className="mobile-nav-label">Simulator</span>
+          </button>
+          <button
+            className={`mobile-nav-btn ${activePanel === 'chat' ? 'active' : ''}`}
+            onClick={() => setActivePanel('chat')}
+          >
+            <span className="mobile-nav-icon">💬</span>
+            <span className="mobile-nav-label">Copilot</span>
+          </button>
+          <button
+            className={`mobile-nav-btn ${activePanel === 'insights' ? 'active' : ''}`}
+            onClick={() => setActivePanel('insights')}
+          >
+            <span className="mobile-nav-icon">📊</span>
+            <span className="mobile-nav-label">Audit</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 
