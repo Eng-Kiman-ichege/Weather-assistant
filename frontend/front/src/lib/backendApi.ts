@@ -10,7 +10,7 @@ export interface WeatherSummary {
 }
 
 const DEFAULT_REMOTE_BACKEND = 'https://weather-assistant-t0ds.onrender.com';
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || (import.meta.env.DEV ? DEFAULT_REMOTE_BACKEND : '');
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || DEFAULT_REMOTE_BACKEND;
 const WEATHER_API_KEY = import.meta.env.VITE_WEATHER_API_KEY?.trim() || '';
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY?.trim() || '';
 
@@ -141,12 +141,13 @@ async function fetchWeatherDirect(location: string): Promise<WeatherSummary> {
 }
 
 export async function fetchLiveWeather(location: string): Promise<WeatherSummary> {
+  if (BACKEND_URL) {
+    return apiFetch(`/api/weather/?location=${encodeURIComponent(location)}`);
+  }
+
   try {
     return await fetchWeatherDirect(location);
   } catch (error) {
-    if (BACKEND_URL) {
-      return apiFetch(`/api/weather/?location=${encodeURIComponent(location)}`);
-    }
     throw error;
   }
 }
