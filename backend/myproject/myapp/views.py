@@ -66,6 +66,31 @@ def _safe_string(value: object, fallback: str) -> str:
     return str(value) if value is not None else fallback
 
 
+def _unwrap_payload(data: dict) -> dict:
+    if isinstance(data.get('data'), dict):
+        return data['data']
+    return data
+
+
+def _get_nested(data: dict, *keys):
+    for key in keys:
+        if not isinstance(data, dict):
+            break
+        if '.' in key:
+            parts = key.split('.')
+            value = data
+            for part in parts:
+                if not isinstance(value, dict) or part not in value:
+                    value = None
+                    break
+                value = value[part]
+            if value is not None:
+                return value
+        elif key in data and data[key] is not None:
+            return data[key]
+    return None
+
+
 def _geocode_location(location: str) -> dict | None:
     headers = {'User-Agent': 'WeatherAI/1.0'}
     nominatim_url = f"https://nominatim.openstreetmap.org/search?format=json&q={urllib.parse.quote(location)}&limit=1"
@@ -143,6 +168,9 @@ def weather_view(request):
     if not location:
         return HttpResponseBadRequest('Missing location parameter.')
 
+    print(f"DEBUG: WEATHER_API_KEY is set: {bool(settings.WEATHER_API_KEY)}")
+    print(f"DEBUG: WEATHER_API_KEY value: {settings.WEATHER_API_KEY[:20] if settings.WEATHER_API_KEY else 'None'}...")
+
     if settings.WEATHER_API_KEY:
         encoded = urllib.parse.quote(location)
         url = f"{settings.WEATHER_API_BASE}/v1/weather?location={encoded}&ai=false&units=metric&days=3"
@@ -156,15 +184,36 @@ def weather_view(request):
         except Exception as exc:
             return HttpResponseServerError(f'Failed to fetch weather: {exc}')
 
-        raw_location = data.get('location', location)
+        data = _unwrap_payload(data)
+        raw_location = _get_nested(data, 'location', 'name') or location
         normalized_location = _safe_string(raw_location, location)
 
-        temperature = _safe_float(data.get('temperature', data.get('temp')))
-        rain_probability = _safe_float(data.get('rainProbability', data.get('precipitationChance')))
-        wind_speed = _safe_float(data.get('windSpeed', data.get('wind_speed')))
-        uv_index = _safe_float(data.get('uvIndex', data.get('uv_index')))
-        forecast_value = data.get('forecast', data.get('summary'))
+        temperature = _safe_float(_get_nested(data, 'temperature', 'temp', 'current_temperature', 'current.temp'))
+        rain_probability = _safe_float(_get_nested(data, 'rainProbability', 'precipitationChance', 'precipitation_probability', 'precipitation'))
+        wind_speed = _safe_float(_get_nested(data, 'windSpeed', 'wind_speed', 'windspeed', 'windSpeed'))
+        uv_index = _safe_float(_get_nested(data, 'uvIndex', 'uv_index', 'uv'))
+        forecast_value = _get_nested(data, 'forecast', 'summary', 'weather', 'condition')
         forecast = _safe_string(forecast_value, 'Partly Cloudy')
+        print(f"DEBUG: Extracted values - temp={temperature}, rain={rain_probability}, wind={wind_speed}, uv={uv_index}")
+        print(f"DEBUG: API data keys: {list(data.keys())}")
+        valid_weather_keys = {
+            'temperature', 'temp', 'rainProbability', 'precipitationChance', 'precipitation_probability',
+            'windSpeed', 'wind_speed', 'windspeed', 'uvIndex', 'uv_index', 'forecast', 'summary', 'weather',
+            'current_weather', 'current', 'temperature_2m'
+        }
+        if not any(key in data for key in valid_weather_keys):
+            coords = _geocode_location(location)
+            if coords:
+                open_meteo_url = (
+                    f"https://api.open-meteo.com/v1/forecast?latitude={coords['latitude']}&longitude={coords['longitude']}"
+                    f"&hourly=temperature_2m,precipitation_probability,windspeed_10m,uv_index&current_weather=true&timezone=auto"
+                )
+                try:
+                    fallback_data = _fetch_json(open_meteo_url, {'User-Agent': 'WeatherAI/1.0'})
+                    forecast_payload = _forecast_from_open_meteo(fallback_data, location)
+                    return JsonResponse(forecast_payload)
+                except Exception as exc:
+                    return HttpResponseServerError(f'Failed to fetch weather fallback: {exc}')
 
         return JsonResponse({
             'location': normalized_location,
