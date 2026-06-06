@@ -11,8 +11,8 @@ export interface WeatherSummary {
 
 const DEFAULT_REMOTE_BACKEND = 'https://weather-assistant-t0ds.onrender.com';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || (import.meta.env.DEV ? DEFAULT_REMOTE_BACKEND : '');
-const WEATHER_API_KEY = 'wai_33a2b7.8454601c4d8b79bf6a7c984ad05637c921667e1fc68f374b';
-const OPENROUTER_API_KEY = '9bba8786283a24f91aab38355635095a62ff97b82e45581bc8a4959f891abc2f';
+const WEATHER_API_KEY = import.meta.env.VITE_WEATHER_API_KEY?.trim() || '';
+const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY?.trim() || '';
 
 async function apiFetch(path: string, options?: RequestInit) {
   const url = BACKEND_URL ? `${BACKEND_URL}${path}` : path;
@@ -77,6 +77,10 @@ async function fetchOpenMeteoWeather(location: string): Promise<WeatherSummary> 
 }
 
 async function fetchWeatherDirect(location: string): Promise<WeatherSummary> {
+  if (!WEATHER_API_KEY) {
+    throw new Error('Missing VITE_WEATHER_API_KEY. Set this in your local .env.local and in Vercel environment variables.');
+  }
+
   const encodedLocation = encodeURIComponent(location);
   const url = `https://api.weather-ai.co/v1/weather?location=${encodedLocation}&ai=false&units=metric&days=3`;
   const response = await fetch(url, {
@@ -157,6 +161,10 @@ export async function requestAiSuggestion(question: string, weather: WeatherSumm
     temperature: 0.25,
     max_tokens: 360,
   };
+
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('Missing VITE_OPENROUTER_API_KEY. Set this in your local .env.local and in Vercel environment variables.');
+  }
 
   const response = await fetch('https://openrouter.ai/v1/chat/completions', {
     method: 'POST',
