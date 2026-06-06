@@ -518,8 +518,8 @@ function analyze(query: string, w: Weather): Analysis {
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
-function getForecastClass(forecast: string) {
-  const f = forecast.toLowerCase();
+function getForecastClass(forecast?: string) {
+  const f = (forecast || '').toLowerCase();
   if (f === 'sunny') return 'bg-sunny';
   if (f === 'showers') return 'bg-showers';
   if (f === 'thunderstorm') return 'bg-thunderstorm';
@@ -694,7 +694,7 @@ export default function App() {
   }
 
   if (launched && weather) return (
-    <div className={`app-page ${getForecastClass(weather.forecast)}`}>
+    <div className={`app-page ${getForecastClass(weather?.forecast)}`}>
       {/* Background blobs */}
       <div className="bg-blob blob-1" />
       <div className="bg-blob blob-2" />
