@@ -9,7 +9,8 @@ export interface WeatherSummary {
   longitude?: number;
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || '';
+const DEFAULT_REMOTE_BACKEND = 'https://weather-assistant-t0ds.onrender.com';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || (import.meta.env.DEV ? DEFAULT_REMOTE_BACKEND : '');
 
 async function apiFetch(path: string, options?: RequestInit) {
   const url = BACKEND_URL ? `${BACKEND_URL}${path}` : path;

@@ -139,13 +139,15 @@ def weather_view(request):
         except Exception as exc:
             return HttpResponseServerError(f'Failed to fetch weather: {exc}')
 
-        return JsonResponse({
-            'location': data.get('location', location),
-            'temperature': float(data.get('temperature', data.get('temp', 0)) or 0),
-            'rainProbability': float(data.get('rainProbability', data.get('precipitationChance', 0)) or 0),
-            'windSpeed': float(data.get('windSpeed', data.get('wind_speed', 0)) or 0),
-            'uvIndex': float(data.get('uvIndex', data.get('uv_index', 0)) or 0),
-            'forecast': str(data.get('forecast', data.get('summary', 'Partly Cloudy'))),
+    raw_location = data.get('location', location)
+    normalized_location = location
+    if isinstance(raw_location, str):
+        normalized_location = raw_location
+    elif isinstance(raw_location, dict):
+        normalized_location = raw_location.get('name') or raw_location.get('display_name') or location
+
+    return JsonResponse({
+        'location': normalized_location,
         })
 
     coords = _geocode_location(location)
