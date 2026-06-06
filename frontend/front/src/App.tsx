@@ -611,6 +611,87 @@ export default function App() {
                   <div className="weather-summary-empty">Live weather is loading from the WeatherAI API.</div>
                 )}
               </div>
+            </div>
+
+            <div className="route-block">
+              <div className="panel-header">
+                <div className="panel-header-icon">🗺️</div>
+                <div>
+                  <div className="panel-title">Route Planner</div>
+                  <div className="panel-desc">Compare weather at each waypoint and preview route conditions.</div>
+                </div>
+              </div>
+
+              <div className="route-input-grid">
+                <div className="route-input-group">
+                  <label>Start</label>
+                  <input
+                    className="chat-input"
+                    value={routeStart}
+                    onChange={e => setRouteStart(e.target.value)}
+                    placeholder="Start location"
+                  />
+                </div>
+                <div className="route-input-group">
+                  <label>End</label>
+                  <input
+                    className="chat-input"
+                    value={routeEnd}
+                    onChange={e => setRouteEnd(e.target.value)}
+                    placeholder="End location"
+                  />
+                </div>
+                <button
+                  className="btn btn-primary btn-sm route-plan-btn"
+                  onClick={loadRouteWeather}
+                >
+                  Plan Route
+                </button>
+              </div>
+
+              <div className="route-status-text">{routeStatus}</div>
+
+              {routeWeather.start && routeWeather.end && routeCoords ? (
+                <>
+                  <div className="route-summary-grid">
+                    {[
+                      { label: 'Start', data: routeWeather.start, coords: routeCoords.start },
+                      { label: 'End', data: routeWeather.end, coords: routeCoords.end },
+                    ].map(segment => (
+                      <div key={segment.label} className="route-card">
+                        <div className="route-card-title">{segment.label}</div>
+                        <div className="route-card-location">{segment.data.location}</div>
+                        <div className="route-card-metrics">
+                          <span>{segment.data.forecast}</span>
+                          <span>{segment.data.temperature}°C</span>
+                          <span>{segment.data.rainProbability}% rain</span>
+                        </div>
+                        <div className="route-card-coords">{segment.coords.latitude.toFixed(3)}, {segment.coords.longitude.toFixed(3)}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="route-map-row">
+                    {[
+                      { label: 'Start', coords: routeCoords.start },
+                      { label: 'End', coords: routeCoords.end },
+                    ].map(pin => (
+                      <div key={pin.label} className="route-mini-map">
+                        <div className="route-mini-map-title">{pin.label}</div>
+                        <div className="map-window">
+                          <div className="map-grid">
+                            {getMapTiles(pin.coords.latitude, pin.coords.longitude, Math.min(mapZoom + 2, 14)).map((tile, idx) => (
+                              <img key={idx} src={tile.url} alt={`${pin.label} tile ${tile.x}/${tile.y}`} className="map-tile" />
+                            ))}
+                          </div>
+                          <div className="map-marker" title={pin.label} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
 
