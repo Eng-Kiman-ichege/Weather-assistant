@@ -26,7 +26,11 @@ SECRET_KEY = 'django-insecure-4^3bynpu+dc)=rjy%bvsti#e^a!%rsl_6ccst**c74b@05o1&a
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'weather-assistant-t0ds.onrender.com').split(',')
+_allowed_hosts = os.environ.get('ALLOWED_HOSTS', '')
+if _allowed_hosts:
+    ALLOWED_HOSTS = [host.strip() for host in _allowed_hosts.split(',') if host.strip()]
+else:
+    ALLOWED_HOSTS = ['weather-assistant-t0ds.onrender.com', '127.0.0.1', 'localhost']
 
 
 # Application definition
