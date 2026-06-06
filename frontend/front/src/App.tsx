@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import './App.css';
-import { createAiSuggestion } from './lib/openRouter';
-import { fetchWeatherForLocation } from './lib/weatherApi';
+import { fetchLiveWeather, requestAiSuggestion } from './lib/backendApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Weather {
@@ -303,14 +302,9 @@ export default function App() {
   }
 
   async function loadLiveWeather() {
-    if (!weatherApiEnabled) {
-      setLiveStatus('Set VITE_WEATHER_API_KEY in .env to enable live weather fetches.');
-      return;
-    }
-
     setLiveStatus('Loading live weather...');
     try {
-      const live = await fetchWeatherForLocation(liveLocation);
+      const live = await fetchLiveWeather(liveLocation);
       setWeather(live);
       setWeatherSource('live');
       setPresetIdx(-1);
@@ -329,22 +323,19 @@ export default function App() {
     const analysis = analyze(q, weather);
     setLastAnalysis(analysis);
 
-    if (openRouterEnabled && aiMode === 'remote') {
+    let remoteText: string | null = null;
+    if (aiMode === 'remote') {
       try {
-        const remoteText = await createAiSuggestion(q, weather);
-        setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: remoteText || analysis.directAnswer, time: now(), analysis }]);
+        remoteText = await requestAiSuggestion(q, weather);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'OpenRouter failed.';
-        setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: `OpenRouter error: ${message}`, time: now(), analysis }]);
-      }
-    } else {
-      setTimeout(() => {
-        setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: analysis.directAnswer, time: now(), analysis }]);
+        const message = error instanceof Error ? error.message : 'OpenRouter call failed.';
+        setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: `Remote AI error: ${message}`, time: now(), analysis }]);
         setThinking(false);
-      }, 600);
-      return;
+        return;
+      }
     }
 
+    setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: remoteText || analysis.directAnswer, time: now(), analysis }]);
     setThinking(false);
   }
 
