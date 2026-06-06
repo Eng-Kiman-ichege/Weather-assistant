@@ -670,8 +670,21 @@ export default function App() {
     return (
       <div className="app-page loading-screen">
         <div className="loading-box">
-          <h2>Loading live weather...</h2>
-          <p>{liveStatus || 'Connecting to the WeatherAI API.'}</p>
+          <div className="loading-graphic">
+            <div className="loading-spinner" />
+            <div className="loading-clouds">
+              <span>☁️</span>
+              <span>☁️</span>
+              <span>☁️</span>
+            </div>
+          </div>
+          <h2>Fetching your latest weather</h2>
+          <p>{liveStatus || 'Connecting to the WeatherAI service and pulling the forecast...'}</p>
+          <div className="loading-dots">
+            <span className="dot" />
+            <span className="dot" />
+            <span className="dot" />
+          </div>
           <button className="btn btn-primary" onClick={() => loadWeather(liveLocation)}>
             Retry
           </button>
