@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import './App.css';
+import { createAiSuggestion } from './lib/openRouter';
+import { fetchWeatherForLocation } from './lib/weatherApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Weather {
@@ -288,19 +290,56 @@ export default function App() {
   function selectPreset(i: number) {
     setPresetIdx(i);
     setWeather(PRESETS[i]);
+    setWeatherSource('simulated');
+    setLiveStatus('');
   }
 
-  function sendMessage(q: string) {
+  async function loadLiveWeather() {
+    if (!weatherApiEnabled) {
+      setLiveStatus('Set VITE_WEATHER_API_KEY in .env to enable live weather fetches.');
+      return;
+    }
+
+    setLiveStatus('Loading live weather...');
+    try {
+      const live = await fetchWeatherForLocation(liveLocation);
+      setWeather(live);
+      setWeatherSource('live');
+      setPresetIdx(-1);
+      setLiveStatus(`Live weather loaded for ${live.location}.`);
+    } catch (error) {
+      setLiveStatus(error instanceof Error ? error.message : 'Failed to load weather.');
+    }
+  }
+
+  async function sendMessage(q: string) {
     if (!q.trim()) return;
     setMessages(p => [...p, { id: Date.now().toString(), from: 'user', text: q, time: now() }]);
     setInput('');
     setThinking(true);
-    setTimeout(() => {
-      const a = analyze(q, weather);
-      setLastAnalysis(a);
-      setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: '', time: now(), analysis: a }]);
-      setThinking(false);
-    }, 800);
+    setAiResponse(null);
+
+    const analysis = analyze(q, weather);
+    setLastAnalysis(analysis);
+
+    if (openRouterEnabled && aiMode === 'remote') {
+      try {
+        const remoteText = await createAiSuggestion(q, weather);
+        setAiResponse(remoteText);
+        setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: remoteText || analysis.directAnswer, time: now(), analysis }]);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'OpenRouter failed.';
+        setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: `OpenRouter error: ${message}`, time: now(), analysis }]);
+      }
+    } else {
+      setTimeout(() => {
+        setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: analysis.directAnswer, time: now(), analysis }]);
+        setThinking(false);
+      }, 600);
+      return;
+    }
+
+    setThinking(false);
   }
 
   // ── COPILOT DASHBOARD VIEW ──────────────────────────────────────────────────
