@@ -11,7 +11,8 @@ export interface WeatherSummary {
 
 const DEFAULT_REMOTE_BACKEND = 'https://weather-assistant-t0ds.onrender.com';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || (import.meta.env.DEV ? DEFAULT_REMOTE_BACKEND : '');
-const WEATHER_API_KEY = import.meta.env.VITE_WEATHER_API_KEY?.trim();
+const WEATHER_API_KEY = 'wai_33a2b7.8454601c4d8b79bf6a7c984ad05637c921667e1fc68f374b';
+const OPENROUTER_API_KEY = '9bba8786283a24f91aab38355635095a62ff97b82e45581bc8a4959f891abc2f';
 
 async function apiFetch(path: string, options?: RequestInit) {
   const url = BACKEND_URL ? `${BACKEND_URL}${path}` : path;
@@ -136,24 +137,41 @@ async function fetchWeatherDirect(location: string): Promise<WeatherSummary> {
 }
 
 export async function fetchLiveWeather(location: string): Promise<WeatherSummary> {
-  if (WEATHER_API_KEY && import.meta.env.DEV) {
-    try {
-      return await fetchWeatherDirect(location);
-    } catch (error) {
-      if (BACKEND_URL) {
-        return apiFetch(`/api/weather/?location=${encodeURIComponent(location)}`);
-      }
-      throw error;
+  try {
+    return await fetchWeatherDirect(location);
+  } catch (error) {
+    if (BACKEND_URL) {
+      return apiFetch(`/api/weather/?location=${encodeURIComponent(location)}`);
     }
+    throw error;
   }
-  return apiFetch(`/api/weather/?location=${encodeURIComponent(location)}`);
 }
 
 export async function requestAiSuggestion(question: string, weather: WeatherSummary): Promise<string> {
-  const data = await apiFetch('/api/ai-suggestion/', {
+  const payload = {
+    model: 'nvidia/nemotron-3-super-120b-a12b:free',
+    messages: [
+      { role: 'system', content: 'You are WeatherAI Copilot, an intelligent weather assistant designed to help users make real-world decisions with current weather data.' },
+      { role: 'user', content: `Current weather data:\n- Location: ${weather.location}\n- Temperature: ${weather.temperature}°C\n- Rain probability: ${weather.rainProbability}%\n- Wind speed: ${weather.windSpeed} km/h\n- UV index: ${weather.uvIndex}\n- Forecast: ${weather.forecast}\n\nQuestion: ${question}` },
+    ],
+    temperature: 0.25,
+    max_tokens: 360,
+  };
+
+  const response = await fetch('https://openrouter.ai/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, weather }),
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
   });
-  return data.suggestion ?? '';
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`OpenRouter request failed (${response.status}): ${text}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content ?? data.result ?? '';
 }
