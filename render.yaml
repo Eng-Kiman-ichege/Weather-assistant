@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: weather-backend
+    env: python
+    plan: free
+    branch: main
+    root: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn myproject.wsgi --log-file -
+    envVars:
+      - key: WEATHER_API_KEY
+      - key: OPENROUTER_API_KEY
