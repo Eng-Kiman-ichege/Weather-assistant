@@ -133,12 +133,12 @@ async function fetchLocationCoordinates(location: string) {
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
-const PRESETS: Weather[] = [
-  { location: 'Nairobi — Farming Highlands', temperature: 21, rainProbability: 75, windSpeed: 12, uvIndex: 6, forecast: 'Showers', latitude: -1.2921, longitude: 36.8219 },
-  { location: 'Miami — Coastal Beach',       temperature: 31, rainProbability: 10, windSpeed: 14, uvIndex: 10, forecast: 'Sunny', latitude: 25.7617, longitude: -80.1918 },
-  { location: 'Cape Town — Windy Ridge',     temperature: 17, rainProbability: 25, windSpeed: 48, uvIndex: 4,  forecast: 'Windy', latitude: -33.9249, longitude: 18.4241 },
-  { location: 'London — Chilly Storm',       temperature: 8,  rainProbability: 85, windSpeed: 25, uvIndex: 1,  forecast: 'Showers', latitude: 51.5074, longitude: -0.1278 },
-];
+const PRESETS = [
+  { label: 'Nairobi — Farming Highlands', location: 'Nairobi, Kenya', latitude: -1.2921, longitude: 36.8219 },
+  { label: 'Miami — Coastal Beach', location: 'Miami, FL, USA', latitude: 25.7617, longitude: -80.1918 },
+  { label: 'Cape Town — Windy Ridge', location: 'Cape Town, South Africa', latitude: -33.9249, longitude: 18.4241 },
+  { label: 'London — Chilly Storm', location: 'London, UK', latitude: 51.5074, longitude: -0.1278 },
+] as const;
 
 const SUGGESTIONS = [
   { label: '🌾 Maize Planting', q: 'Can I plant maize this weekend?' },
@@ -317,11 +317,19 @@ export default function App() {
   });
 
   const [launched, setLaunched] = useState(false);
-  const [liveLocation, setLiveLocation] = useState('Nairobi');
-  const [weatherSource, setWeatherSource] = useState<'simulated' | 'live'>('simulated');
+  const [liveLocation, setLiveLocation] = useState('Nairobi, Kenya');
+  const [weather, setWeather] = useState<Weather | null>(null);
+  const [weatherSource, setWeatherSource] = useState<'preset' | 'live'>('preset');
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [mapZoom, setMapZoom] = useState(8);
+  const [activePanel, setActivePanel] = useState<'simulator' | 'chat' | 'insights'>('chat');
   const aiMode = 'remote';
   const [liveStatus, setLiveStatus] = useState('');
-  const [activePanel, setActivePanel] = useState<'simulator' | 'chat' | 'insights'>('chat');
+  const [routeStart, setRouteStart] = useState('Nairobi, Kenya');
+  const [routeEnd, setRouteEnd] = useState('Mombasa, Kenya');
+  const [routeWeather, setRouteWeather] = useState<{ start: Weather | null; end: Weather | null }>({ start: null, end: null });
+  const [routeCoords, setRouteCoords] = useState<{ start: { latitude: number; longitude: number }; end: { latitude: number; longitude: number } } | null>(null);
+  const [routeStatus, setRouteStatus] = useState('Enter start and end points, then click plan route.');
 
   // Sandbox state (for landing page teaser)
   const [sandboxTopic, setSandboxTopic] = useState<'farming' | 'beach' | 'painting'>('farming');
@@ -329,17 +337,10 @@ export default function App() {
   const sandboxQuery = sandboxTopic === 'farming' ? 'Can I plant maize this weekend?' : sandboxTopic === 'beach' ? 'Should I go to the beach this weekend?' : 'Can I paint my garden fence today?';
   const sandboxResult = analyze(sandboxQuery, sandboxW);
 
-  // App (dashboard) state
-  const [weather, setWeather] = useState<Weather>(PRESETS[0]);
   const [presetIdx, setPresetIdx] = useState(0);
-  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(() => {
-    const first = PRESETS[0];
-    return first.latitude != null && first.longitude != null ? { latitude: first.latitude, longitude: first.longitude } : null;
-  });
-  const [mapZoom, setMapZoom] = useState(8);
   const [messages, setMessages] = useState<Message[]>([{
     id: 'init', from: 'bot', time: now(),
-    text: 'Hello! I\'m WeatherAI Copilot. Set your weather conditions using the simulator panel, then ask me any decision question — farming, beach, sports, home errands, and more.',
+    text: 'Hello! I\'m WeatherAI Copilot. Select a location from the presets or fetch live weather, then ask a decision question using the current API-powered forecast.',
   }]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -366,42 +367,62 @@ export default function App() {
 
   function now() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
-  function selectPreset(i: number) {
-    setPresetIdx(i);
-    setWeather(PRESETS[i]);
-    setWeatherSource('simulated');
-    setLiveStatus('');
-    const preset = PRESETS[i];
-    if (preset.latitude != null && preset.longitude != null) {
-      setCoordinates({ latitude: preset.latitude, longitude: preset.longitude });
-      setMapZoom(8);
-    }
-  }
-
-  async function loadLiveWeather() {
-    setLiveStatus('Loading live weather...');
+  async function loadWeather(location: string, latitude?: number, longitude?: number) {
+    setLiveStatus(`Loading weather for ${location}...`);
     try {
-      const live = await fetchLiveWeather(liveLocation);
+      const live = await fetchLiveWeather(location);
       setWeather(live);
       setWeatherSource('live');
-      setPresetIdx(-1);
+      setLiveLocation(location);
+      setPresetIdx(PRESETS.findIndex(p => p.location === location));
+      const coords = latitude != null && longitude != null
+        ? { latitude, longitude }
+        : await fetchLocationCoordinates(location);
+      setCoordinates(coords);
+      setMapZoom(8);
       setLiveStatus(`Live weather loaded for ${live.location}.`);
-
-      try {
-        const coords = await fetchLocationCoordinates(liveLocation);
-        setCoordinates(coords);
-        setMapZoom(9);
-        setLiveStatus(`Live weather and OpenStreetMap location loaded for ${live.location}.`);
-      } catch (mapError) {
-        setLiveStatus(prev => `${prev} (map unavailable)`);
-      }
     } catch (error) {
       setLiveStatus(error instanceof Error ? error.message : 'Failed to load weather.');
     }
   }
 
+  async function selectPreset(i: number) {
+    const preset = PRESETS[i];
+    setPresetIdx(i);
+    setWeatherSource('preset');
+    setLiveStatus('Fetching preset weather...');
+    await loadWeather(preset.location, preset.latitude, preset.longitude);
+  }
+
+  async function loadLiveWeather() {
+    await loadWeather(liveLocation);
+  }
+
+  async function loadRouteWeather() {
+    setRouteStatus('Planning route weather...');
+    try {
+      const [startData, endData] = await Promise.all([
+        fetchLiveWeather(routeStart),
+        fetchLiveWeather(routeEnd),
+      ]);
+      const [startCoords, endCoords] = await Promise.all([
+        fetchLocationCoordinates(routeStart),
+        fetchLocationCoordinates(routeEnd),
+      ]);
+      setRouteWeather({ start: startData, end: endData });
+      setRouteCoords({ start: startCoords, end: endCoords });
+      setRouteStatus(`Route weather loaded for ${startData.location} → ${endData.location}.`);
+    } catch (error) {
+      setRouteStatus(error instanceof Error ? error.message : 'Failed to load route weather.');
+    }
+  }
+
+  useEffect(() => {
+    loadWeather(PRESETS[0].location, PRESETS[0].latitude, PRESETS[0].longitude);
+  }, []);
+
   async function sendMessage(q: string) {
-    if (!q.trim()) return;
+    if (!q.trim() || !weather) return;
     setMessages(p => [...p, { id: Date.now().toString(), from: 'user', text: q, time: now() }]);
     setInput('');
     setThinking(true);
@@ -423,7 +444,21 @@ export default function App() {
   }
 
   // ── COPILOT DASHBOARD VIEW ──────────────────────────────────────────────────
-  if (launched) return (
+  if (launched && !weather) {
+    return (
+      <div className="app-page loading-screen">
+        <div className="loading-box">
+          <h2>Loading live weather...</h2>
+          <p>{liveStatus || 'Connecting to the WeatherAI API.'}</p>
+          <button className="btn btn-primary" onClick={() => loadWeather(liveLocation)}>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (launched && weather) return (
     <div className={`app-page ${getForecastClass(weather.forecast)}`}>
       {/* Background blobs */}
       <div className="bg-blob blob-1" />
@@ -461,7 +496,7 @@ export default function App() {
             onClick={() => selectPreset(i)}
           >
             <span className="preset-tab-dot" />
-            {p.location.split('—')[0].trim()}
+            {p.label}
           </button>
         ))}
       </div>
@@ -474,21 +509,21 @@ export default function App() {
           <div className="panel-header">
             <div className="panel-header-icon">🌡️</div>
             <div>
-              <div className="panel-title">Weather Simulator</div>
-              <div className="panel-desc">Configure parameters to test AI decisions</div>
+              <div className="panel-title">Weather Dashboard</div>
+              <div className="panel-desc">All conditions are loaded from the WeatherAI API in real time.</div>
             </div>
           </div>
 
           <div className="sim-body">
             {/* Location chip */}
             <div className="location-chip">
-              <div>{weatherIcon(weather.forecast)}</div>
+              <div>{weather ? weatherIcon(weather.forecast) : <CloudIcon />}</div>
               <div className="location-chip-labels">
                 <div className="location-source-badge">
-                  {weatherSource === 'live' ? '📡 Live Weather' : '🧪 Simulated'}
+                  {weatherSource === 'live' ? '📡 Live Location' : '📍 Preset Location'}
                 </div>
-                <div className="location-name">{weather.location}</div>
-                <div className="location-forecast">{weather.forecast} · {weather.temperature}°C</div>
+                <div className="location-name">{weather?.location || 'Fetching weather...'}</div>
+                <div className="location-forecast">{weather ? `${weather.forecast} · ${weather.temperature}°C` : 'Waiting for API data'}</div>
               </div>
             </div>
 
@@ -543,7 +578,7 @@ export default function App() {
                   </div>
                   <div className="map-marker" title="Current location" />
                   <div className="map-meta">
-                    <div>{weather.location}</div>
+                    <div>{weather?.location || liveLocation}</div>
                     <div>{coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}</div>
                   </div>
                 </div>
@@ -552,45 +587,30 @@ export default function App() {
               )}
             </div>
 
-            {/* Forecast picker */}
-            <div className="forecast-block">
-              <label>Forecast State</label>
-              <select
-                className="select-field"
-                value={weather.forecast}
-                onChange={e => setWeather(p => ({ ...p, forecast: e.target.value, location: 'Custom Location' }))}
-              >
-                <option value="Sunny">☀️ Sunny</option>
-                <option value="Partly Cloudy">⛅ Partly Cloudy</option>
-                <option value="Showers">🌧️ Showers</option>
-                <option value="Thunderstorm">⛈️ Thunderstorm</option>
-                <option value="Windy">💨 Windy</option>
-              </select>
-            </div>
-
-            {/* Sliders */}
-            <div className="sliders-block">
-              {[
-                { label: '🌡️ Temperature', key: 'temperature' as const, min: -10, max: 45, unit: '°C', cls: 'range-temp' },
-                { label: '🌧️ Rain Probability', key: 'rainProbability' as const, min: 0, max: 100, unit: '%', cls: 'range-rain' },
-                { label: '💨 Wind Speed', key: 'windSpeed' as const, min: 0, max: 80, unit: ' km/h', cls: 'range-wind' },
-                { label: '☀️ UV Index', key: 'uvIndex' as const, min: 0, max: 12, unit: '', cls: 'range-uv' },
-              ].map(({ label, key, min, max, unit, cls }) => (
-                <div className="slider-row" key={key}>
-                  <div className="slider-header">
-                    <span className="slider-label">{label}</span>
-                    <span className="slider-value">{weather[key]}{unit}</span>
-                  </div>
-                  <input
-                    type="range"
-                    className={cls}
-                    min={min} max={max}
-                    value={weather[key]}
-                    onChange={e => setWeather(p => ({ ...p, [key]: parseInt(e.target.value), location: 'Custom Location' }))}
-                  />
+            <div className="weather-summary-block">
+              <div className="panel-header">
+                <div className="panel-header-icon">📌</div>
+                <div>
+                  <div className="panel-title">Current Conditions</div>
+                  <div className="panel-desc">Live values from the WeatherAI API drive every decision.</div>
                 </div>
-              ))}
-            </div>
+              </div>
+              <div className="weather-stats-grid">
+                {weather ? [
+                  { label: 'Temperature', value: `${weather.temperature}°C`, hint: 'Air temperature' },
+                  { label: 'Rain chance', value: `${weather.rainProbability}%`, hint: 'Precipitation likelihood' },
+                  { label: 'Wind speed', value: `${weather.windSpeed} km/h`, hint: 'Surface wind' },
+                  { label: 'UV index', value: `${weather.uvIndex}`, hint: 'Sun exposure risk' },
+                ].map((stat, idx) => (
+                  <div className="weather-stat" key={idx}>
+                    <div className="weather-stat-label">{stat.label}</div>
+                    <div className="weather-stat-value">{stat.value}</div>
+                    <div className="weather-stat-hint">{stat.hint}</div>
+                  </div>
+                )) : (
+                  <div className="weather-summary-empty">Live weather is loading from the WeatherAI API.</div>
+                )}
+              </div>
           </div>
         </div>
 

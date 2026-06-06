@@ -33,30 +33,10 @@ def weather_view(request):
         return HttpResponseBadRequest('Missing location parameter.')
 
     if not settings.WEATHER_API_KEY:
-        # Fall back to simulated weather for the location rather than returning 500 error
-        import random
-        # Seed by location name to make mock weather stable per city
-        random.seed(location.lower())
-        temp = random.randint(14, 33)
-        rain = random.randint(5, 95)
-        wind = random.randint(4, 45)
-        uv = random.randint(1, 11)
-        forecasts = ['Sunny', 'Partly Cloudy', 'Showers', 'Thunderstorm', 'Windy']
-        forecast = random.choice(forecasts)
-        # reset seed
-        random.seed(None)
-        
-        return JsonResponse({
-            'location': f"{location.capitalize()} — Simulated",
-            'temperature': temp,
-            'rainProbability': rain,
-            'windSpeed': wind,
-            'uvIndex': uv,
-            'forecast': forecast,
-        })
+        return HttpResponseServerError('Weather API key is not configured on the backend.')
 
     encoded = urllib.parse.quote(location)
-    url = f"{settings.WEATHER_API_BASE}/v1/current?location={encoded}"
+    url = f"{settings.WEATHER_API_BASE}/v1/weather?location={encoded}&ai=false&units=metric&days=3"
     headers = {
         'Authorization': f'Bearer {settings.WEATHER_API_KEY}',
         'Content-Type': 'application/json',
