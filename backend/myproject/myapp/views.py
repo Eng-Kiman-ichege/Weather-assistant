@@ -184,6 +184,11 @@ def weather_view(request):
         except Exception as exc:
             return HttpResponseServerError(f'Failed to fetch weather: {exc}')
 
+        print(f"DEBUG: Raw API response data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+        if isinstance(data, dict) and 'current' in data:
+            print(f"DEBUG: current keys: {list(data['current'].keys())}")
+            print(f"DEBUG: current.temperature: {data['current'].get('temperature')}")
+
         data = _unwrap_payload(data)
         raw_location = _get_nested(data, 'location', 'name') or location
         normalized_location = _safe_string(raw_location, location)
