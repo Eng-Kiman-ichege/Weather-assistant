@@ -9,4 +9,6 @@ services:
     startCommand: gunicorn myproject.wsgi --log-file -
     envVars:
       - key: WEATHER_API_KEY
+        value: wai_33a2b7.8454601c4d8b79bf6a7c984ad05637c921667e1fc68f374b
       - key: OPENROUTER_API_KEY
+        value: 9bba8786283a24f91aab38355635095a62ff97b82e45581bc8a4959f891abc2f
