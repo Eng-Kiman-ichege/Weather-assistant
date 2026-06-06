@@ -36,6 +36,7 @@ else:
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -47,6 +48,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -126,3 +128,23 @@ WEATHER_API_BASE = os.environ.get('WEATHER_API_BASE', 'https://api.weather-ai.co
 WEATHER_API_KEY = os.environ.get('WEATHER_API_KEY')
 OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY')
 OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'nvidia/nemotron-3-super-120b-a12b:free')
+
+# CORS Configuration - Allow Vercel deployments and local development
+_cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+if _cors_origins:
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(',') if origin.strip()]
+else:
+    CORS_ALLOWED_ORIGINS = [
+        'https://weather-assistant-seven.vercel.app',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ]
+
+# Allow regex patterns for Vercel preview deployments
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"https://weather-assistant-.*\.vercel\.app$",  # All Vercel preview URLs
+]
+
+CORS_ALLOW_CREDENTIALS = True
