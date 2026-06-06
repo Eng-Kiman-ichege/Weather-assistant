@@ -69,7 +69,32 @@ def _safe_string(value: object, fallback: str) -> str:
 def _unwrap_payload(data: dict) -> dict:
     if isinstance(data.get('data'), dict):
         return data['data']
+    if isinstance(data.get('response'), dict):
+        return data['response']
+    if isinstance(data.get('payload'), dict):
+        return data['payload']
     return data
+
+
+def _contains_weather_keys(data: object) -> bool:
+    valid_weather_keys = {
+        'temperature', 'temp', 'rainProbability', 'precipitationChance', 'precipitation_probability',
+        'precipitation', 'windSpeed', 'wind_speed', 'windspeed', 'uvIndex', 'uv_index',
+        'forecast', 'summary', 'weather', 'current_weather', 'current', 'hourly', 'location'
+    }
+
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key in valid_weather_keys:
+                return True
+            if isinstance(value, dict) and _contains_weather_keys(value):
+                return True
+            if isinstance(value, list):
+                for item in value:
+                    if _contains_weather_keys(item):
+                        return True
+        return False
+    return False
 
 
 def _get_nested(data: dict, *keys):
@@ -193,12 +218,7 @@ def weather_view(request):
         forecast = _safe_string(forecast_value, 'Partly Cloudy')
         print(f"DEBUG: Extracted values - temp={temperature}, rain={rain_probability}, wind={wind_speed}, uv={uv_index}")
         print(f"DEBUG: API data keys: {list(data.keys())}")
-        valid_weather_keys = {
-            'temperature', 'temp', 'rainProbability', 'precipitationChance', 'precipitation_probability',
-            'windSpeed', 'wind_speed', 'windspeed', 'uvIndex', 'uv_index', 'forecast', 'summary', 'weather',
-            'current_weather', 'current', 'temperature_2m'
-        }
-        if not any(key in data for key in valid_weather_keys):
+        if not _contains_weather_keys(data):
             coords = _geocode_location(location)
             if coords:
                 open_meteo_url = (
