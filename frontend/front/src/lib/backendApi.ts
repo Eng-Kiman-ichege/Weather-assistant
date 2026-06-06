@@ -9,27 +9,27 @@ export interface WeatherSummary {
   longitude?: number;
 }
 
-export async function fetchLiveWeather(location: string): Promise<WeatherSummary> {
-  const response = await fetch(`/api/weather/?location=${encodeURIComponent(location)}`);
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || '';
+
+async function apiFetch(path: string, options?: RequestInit) {
+  const url = BACKEND_URL ? `${BACKEND_URL}${path}` : path;
+  const response = await fetch(url, options);
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Live weather fetch failed: ${errorText}`);
+    throw new Error(`Backend request failed (${response.status}): ${errorText}`);
   }
   return response.json();
 }
 
+export async function fetchLiveWeather(location: string): Promise<WeatherSummary> {
+  return apiFetch(`/api/weather/?location=${encodeURIComponent(location)}`);
+}
+
 export async function requestAiSuggestion(question: string, weather: WeatherSummary): Promise<string> {
-  const response = await fetch('/api/ai-suggestion/', {
+  const data = await apiFetch('/api/ai-suggestion/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, weather }),
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`AI suggestion request failed: ${errorText}`);
-  }
-
-  const data = await response.json();
   return data.suggestion ?? '';
 }
