@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import type { ChangeEvent } from 'react';
 import './App.css';
 import { fetchLiveWeather, requestAiSuggestion } from './lib/backendApi';
+import { TestAPIs } from './TestAPIs';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Weather {
@@ -533,6 +534,7 @@ export default function App() {
     return window.localStorage.getItem('weatherai-theme') === 'dark' ? 'dark' : 'light';
   });
 
+  const [showTestAPIs, setShowTestAPIs] = useState(false);
   const [launched, setLaunched] = useState(false);
   const [liveLocation, setLiveLocation] = useState('Nairobi, Kenya');
   const [weather, setWeather] = useState<Weather | null>(null);
@@ -1054,6 +1056,9 @@ export default function App() {
               <button className="theme-toggle" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}>
                 {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
               </button>
+              <button className="theme-toggle" onClick={() => setShowTestAPIs(!showTestAPIs)} title="Dev: Test APIs">
+                🧪 APIs
+              </button>
               <button className="btn btn-primary btn-sm" onClick={() => setLaunched(true)}>
                 Launch Copilot →
               </button>
@@ -1061,6 +1066,14 @@ export default function App() {
           </div>
         </div>
       </nav>
+
+      {showTestAPIs && (
+        <div style={{ background: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)', padding: '20px' }}>
+          <div className="container">
+            <TestAPIs />
+          </div>
+        </div>
+      )}
 
       {/* ── Hero ── */}
       <section className="hero">
