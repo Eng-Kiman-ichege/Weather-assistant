@@ -260,14 +260,12 @@ function analyze(query: string, w: Weather): Analysis {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const openRouterEnabled = Boolean(import.meta.env.VITE_OPENROUTER_API_KEY);
-  const weatherApiEnabled = Boolean(import.meta.env.VITE_WEATHER_API_KEY);
-  const openRouterModel = import.meta.env.VITE_OPENROUTER_MODEL ?? 'nvidia/nemotron-3-super-120b-a12b:free';
+  const openRouterModel = 'nvidia/nemotron-3-super-120b-a12b:free';
 
   const [launched, setLaunched] = useState(false);
   const [liveLocation, setLiveLocation] = useState('Nairobi');
   const [weatherSource, setWeatherSource] = useState<'simulated' | 'live'>('simulated');
-  const [aiMode, setAiMode] = useState<'local' | 'remote'>(openRouterEnabled ? 'remote' : 'local');
+  const [aiMode, setAiMode] = useState<'local' | 'remote'>('remote');
   const [liveStatus, setLiveStatus] = useState('');
 
   // Sandbox state (for landing page teaser)
@@ -403,13 +401,12 @@ export default function App() {
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={loadLiveWeather}
-                  disabled={!weatherApiEnabled}
                 >
                   Fetch live forecast
                 </button>
               </div>
-              <div style={{ fontSize: 12, color: weatherApiEnabled ? 'var(--color-text-muted)' : 'var(--color-danger)' }}>
-                {liveStatus || (weatherApiEnabled ? 'Live weather will update the simulator values.' : 'Configure VITE_WEATHER_API_KEY to enable live weather fetches.')}
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                {liveStatus || 'Live weather is fetched through the Django backend.'}
               </div>
             </div>
 
@@ -449,7 +446,7 @@ export default function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, marginBottom: 18 }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 6 }}>AI Suggestion Engine</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-heading)' }}>{openRouterEnabled ? openRouterModel : 'Local inference only'}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-heading)' }}>{openRouterModel}</div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
@@ -461,7 +458,6 @@ export default function App() {
               <button
                 className={`btn btn-sm ${aiMode === 'remote' ? 'btn-primary' : 'btn-outline'}`}
                 onClick={() => setAiMode('remote')}
-                disabled={!openRouterEnabled}
               >
                 OpenRouter AI
               </button>
