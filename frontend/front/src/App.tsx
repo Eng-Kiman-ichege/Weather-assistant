@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import type { ChangeEvent } from 'react';
 import './App.css';
 import { fetchLiveWeather, requestAiSuggestion } from './lib/backendApi';
 
@@ -130,6 +131,218 @@ async function fetchLocationCoordinates(location: string) {
     latitude: parseFloat(data[0].lat),
     longitude: parseFloat(data[0].lon),
   };
+}
+
+interface MapPreviewProps {
+  coordinates: { latitude: number; longitude: number } | null;
+  locationLabel: string;
+  mapZoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+}
+
+function MapPreview({ coordinates, locationLabel, mapZoom, onZoomIn, onZoomOut }: MapPreviewProps) {
+  return (
+    <div className="map-block">
+      <div className="map-block-header">
+        <div>
+          <div className="panel-title">Location Map</div>
+          <div className="panel-desc">OpenStreetMap tiles show the current location context.</div>
+        </div>
+        <div className="map-toolbar">
+          <button className="map-zoom-btn" onClick={onZoomOut}>-</button>
+          <span>{mapZoom}</span>
+          <button className="map-zoom-btn" onClick={onZoomIn}>+</button>
+        </div>
+      </div>
+      {coordinates ? (
+        <div className="map-window">
+          <div className="map-grid">
+            {getMapTiles(coordinates.latitude, coordinates.longitude, mapZoom).map((tile, idx) => (
+              <img key={idx} src={tile.url} alt={`OSM tile ${tile.x}/${tile.y}`} className="map-tile" />
+            ))}
+          </div>
+          <div className="map-marker" title="Current location" />
+          <div className="map-meta">
+            <div>{locationLabel}</div>
+            <div>{coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}</div>
+          </div>
+        </div>
+      ) : (
+        <div className="map-fallback">Choose a preset or fetch live weather to view the OpenStreetMap location.</div>
+      )}
+    </div>
+  );
+}
+
+function WeatherSummaryBlock({ weather }: { weather: Weather | null }) {
+  return (
+    <div className="weather-summary-block">
+      <div className="panel-header">
+        <div className="panel-header-icon">📌</div>
+        <div>
+          <div className="panel-title">Current Conditions</div>
+          <div className="panel-desc">Live values from the WeatherAI API drive every decision.</div>
+        </div>
+      </div>
+      <div className="weather-stats-grid">
+        {weather ? [
+          {
+            label: 'Temperature',
+            value: `${weather.temperature}°C`,
+            hint: 'Air temperature',
+            percent: Math.min(100, Math.max(0, ((weather.temperature + 10) / 55) * 100)),
+            color: 'linear-gradient(90deg, #f59e0b, #fbbf24)',
+          },
+          {
+            label: 'Rain chance',
+            value: `${weather.rainProbability}%`,
+            hint: 'Precipitation likelihood',
+            percent: weather.rainProbability,
+            color: 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+          },
+          {
+            label: 'Wind speed',
+            value: `${weather.windSpeed} km/h`,
+            hint: 'Surface wind',
+            percent: Math.min(100, (weather.windSpeed / 80) * 100),
+            color: 'linear-gradient(90deg, #06b6d4, #22d3ee)',
+          },
+          {
+            label: 'UV index',
+            value: `${weather.uvIndex}`,
+            hint: 'Sun exposure risk',
+            percent: Math.min(100, (weather.uvIndex / 12) * 100),
+            color: 'linear-gradient(90deg, #a855f7, #c084fc)',
+          },
+        ].map((stat, idx) => (
+          <div className="weather-stat" key={idx}>
+            <div className="weather-stat-header">
+              <div>
+                <div className="weather-stat-label">{stat.label}</div>
+                <div className="weather-stat-hint">{stat.hint}</div>
+              </div>
+              <div className="weather-stat-value">{stat.value}</div>
+            </div>
+            <div className="weather-stat-bar">
+              <div className="weather-stat-track">
+                <div className="weather-stat-fill" style={{ width: `${stat.percent}%`, background: stat.color }} />
+              </div>
+              <div className="weather-stat-bar-meta">
+                <span className="weather-stat-bar-text">Trend</span>
+                <span className="weather-stat-bar-percent">{Math.round(stat.percent)}%</span>
+              </div>
+            </div>
+          </div>
+        )) : (
+          <div className="weather-summary-empty">Live weather is loading from the WeatherAI API.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface RoutePlannerPanelProps {
+  routeStart: string;
+  routeEnd: string;
+  routeStatus: string;
+  routeWeather: { start: Weather | null; end: Weather | null };
+  routeCoords: { start: { latitude: number; longitude: number }; end: { latitude: number; longitude: number } } | null;
+  mapZoom: number;
+  onRouteStartChange: (value: string) => void;
+  onRouteEndChange: (value: string) => void;
+  onPlanRoute: () => void;
+}
+
+function RoutePlannerPanel({
+  routeStart,
+  routeEnd,
+  routeStatus,
+  routeWeather,
+  routeCoords,
+  mapZoom,
+  onRouteStartChange,
+  onRouteEndChange,
+  onPlanRoute,
+}: RoutePlannerPanelProps) {
+  return (
+    <div className="route-block">
+      <div className="panel-header">
+        <div className="panel-header-icon">🗺️</div>
+        <div>
+          <div className="panel-title">Route Planner</div>
+          <div className="panel-desc">Compare weather at each waypoint and preview route conditions.</div>
+        </div>
+      </div>
+
+      <div className="route-input-grid">
+        <div className="route-input-group">
+          <label>Start</label>
+          <input
+            className="chat-input"
+            value={routeStart}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => onRouteStartChange(e.target.value)}
+            placeholder="Start location"
+          />
+        </div>
+        <div className="route-input-group">
+          <label>End</label>
+          <input
+            className="chat-input"
+            value={routeEnd}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => onRouteEndChange(e.target.value)}
+            placeholder="End location"
+          />
+        </div>
+        <button className="btn btn-primary btn-sm route-plan-btn" onClick={onPlanRoute}>
+          Plan Route
+        </button>
+      </div>
+
+      <div className="route-status-text">{routeStatus}</div>
+
+      {routeWeather.start && routeWeather.end && routeCoords ? (
+        <>
+          <div className="route-summary-grid">
+            {[
+              { label: 'Start', data: routeWeather.start, coords: routeCoords.start },
+              { label: 'End', data: routeWeather.end, coords: routeCoords.end },
+            ].map(segment => (
+              <div key={segment.label} className="route-card">
+                <div className="route-card-title">{segment.label}</div>
+                <div className="route-card-location">{segment.data.location}</div>
+                <div className="route-card-metrics">
+                  <span>{segment.data.forecast}</span>
+                  <span>{segment.data.temperature}°C</span>
+                  <span>{segment.data.rainProbability}% rain</span>
+                </div>
+                <div className="route-card-coords">{segment.coords.latitude.toFixed(3)}, {segment.coords.longitude.toFixed(3)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="route-map-row">
+            {[
+              { label: 'Start', coords: routeCoords.start },
+              { label: 'End', coords: routeCoords.end },
+            ].map(pin => (
+              <div key={pin.label} className="route-mini-map">
+                <div className="route-mini-map-title">{pin.label}</div>
+                <div className="map-window">
+                  <div className="map-grid">
+                    {getMapTiles(pin.coords.latitude, pin.coords.longitude, Math.min(mapZoom + 2, 14)).map((tile, idx) => (
+                      <img key={idx} src={tile.url} alt={`${pin.label} tile ${tile.x}/${tile.y}`} className="map-tile" />
+                    ))}
+                  </div>
+                  <div className="map-marker" title={pin.label} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -323,6 +536,7 @@ export default function App() {
   const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const [mapZoom, setMapZoom] = useState(8);
   const [activePanel, setActivePanel] = useState<'simulator' | 'chat' | 'insights'>('chat');
+  const [activePage, setActivePage] = useState<'dashboard' | 'routePlanner'>('dashboard');
   const aiMode = 'remote';
   const [liveStatus, setLiveStatus] = useState('');
   const [routeStart, setRouteStart] = useState('Nairobi, Kenya');
@@ -476,6 +690,20 @@ export default function App() {
             <BrandIcon />
             WeatherAI Copilot
           </div>
+          <div className="app-header-nav">
+            <button
+              className={`app-nav-link ${activePage === 'dashboard' ? 'active' : ''}`}
+              onClick={() => setActivePage('dashboard')}
+            >
+              Dashboard
+            </button>
+            <button
+              className={`app-nav-link ${activePage === 'routePlanner' ? 'active' : ''}`}
+              onClick={() => setActivePage('routePlanner')}
+            >
+              Route Planner
+            </button>
+          </div>
           <div className="spacer" />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div className="status-dot" />
@@ -488,24 +716,26 @@ export default function App() {
       </header>
 
       {/* ─── Preset Tabs ─── */}
-      <div className="preset-tabs">
-        {PRESETS.map((p, i) => (
-          <button
-            key={i}
-            className={`preset-tab ${presetIdx === i ? 'active' : ''}`}
-            onClick={() => selectPreset(i)}
-          >
-            <span className="preset-tab-dot" />
-            {p.label}
-          </button>
-        ))}
-      </div>
+      {activePage === 'dashboard' && (
+        <div className="preset-tabs">
+          {PRESETS.map((p, i) => (
+            <button
+              key={i}
+              className={`preset-tab ${presetIdx === i ? 'active' : ''}`}
+              onClick={() => selectPreset(i)}
+            >
+              <span className="preset-tab-dot" />
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* ─── Grid ─── */}
-      <div className="app-grid">
+      {activePage === 'dashboard' ? (
+        <div className="app-grid">
 
-        {/* ── Simulator Panel ── */}
-        <div className={`app-panel app-simulator ${activePanel === 'simulator' ? 'active-mobile' : ''}`}>
+          {/* ── Simulator Panel ── */}
+          <div className={`app-panel app-simulator ${activePanel === 'simulator' ? 'active-mobile' : ''}`}>
           <div className="panel-header">
             <div className="panel-header-icon">🌡️</div>
             <div>
@@ -556,142 +786,25 @@ export default function App() {
               </div>
             </div>
 
-            {/* OpenStreetMap location preview */}
-            <div className="map-block">
-              <div className="map-block-header">
-                <div>
-                  <div className="panel-title">Location Map</div>
-                  <div className="panel-desc">OpenStreetMap tiles show the current location context.</div>
-                </div>
-                <div className="map-toolbar">
-                  <button className="map-zoom-btn" onClick={() => setMapZoom(z => Math.max(3, z - 1))}>-</button>
-                  <span>{mapZoom}</span>
-                  <button className="map-zoom-btn" onClick={() => setMapZoom(z => Math.min(14, z + 1))}>+</button>
-                </div>
-              </div>
-              {coordinates ? (
-                <div className="map-window">
-                  <div className="map-grid">
-                    {getMapTiles(coordinates.latitude, coordinates.longitude, mapZoom).map((tile, idx) => (
-                      <img key={idx} src={tile.url} alt={`OSM tile ${tile.x}/${tile.y}`} className="map-tile" />
-                    ))}
-                  </div>
-                  <div className="map-marker" title="Current location" />
-                  <div className="map-meta">
-                    <div>{weather?.location || liveLocation}</div>
-                    <div>{coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="map-fallback">Choose a preset or fetch live weather to view the OpenStreetMap location.</div>
-              )}
-            </div>
-
-            <div className="weather-summary-block">
-              <div className="panel-header">
-                <div className="panel-header-icon">📌</div>
-                <div>
-                  <div className="panel-title">Current Conditions</div>
-                  <div className="panel-desc">Live values from the WeatherAI API drive every decision.</div>
-                </div>
-              </div>
-              <div className="weather-stats-grid">
-                {weather ? [
-                  { label: 'Temperature', value: `${weather.temperature}°C`, hint: 'Air temperature' },
-                  { label: 'Rain chance', value: `${weather.rainProbability}%`, hint: 'Precipitation likelihood' },
-                  { label: 'Wind speed', value: `${weather.windSpeed} km/h`, hint: 'Surface wind' },
-                  { label: 'UV index', value: `${weather.uvIndex}`, hint: 'Sun exposure risk' },
-                ].map((stat, idx) => (
-                  <div className="weather-stat" key={idx}>
-                    <div className="weather-stat-label">{stat.label}</div>
-                    <div className="weather-stat-value">{stat.value}</div>
-                    <div className="weather-stat-hint">{stat.hint}</div>
-                  </div>
-                )) : (
-                  <div className="weather-summary-empty">Live weather is loading from the WeatherAI API.</div>
-                )}
-              </div>
-            </div>
-
-            <div className="route-block">
-              <div className="panel-header">
-                <div className="panel-header-icon">🗺️</div>
-                <div>
-                  <div className="panel-title">Route Planner</div>
-                  <div className="panel-desc">Compare weather at each waypoint and preview route conditions.</div>
-                </div>
-              </div>
-
-              <div className="route-input-grid">
-                <div className="route-input-group">
-                  <label>Start</label>
-                  <input
-                    className="chat-input"
-                    value={routeStart}
-                    onChange={e => setRouteStart(e.target.value)}
-                    placeholder="Start location"
-                  />
-                </div>
-                <div className="route-input-group">
-                  <label>End</label>
-                  <input
-                    className="chat-input"
-                    value={routeEnd}
-                    onChange={e => setRouteEnd(e.target.value)}
-                    placeholder="End location"
-                  />
-                </div>
-                <button
-                  className="btn btn-primary btn-sm route-plan-btn"
-                  onClick={loadRouteWeather}
-                >
-                  Plan Route
-                </button>
-              </div>
-
-              <div className="route-status-text">{routeStatus}</div>
-
-              {routeWeather.start && routeWeather.end && routeCoords ? (
-                <>
-                  <div className="route-summary-grid">
-                    {[
-                      { label: 'Start', data: routeWeather.start, coords: routeCoords.start },
-                      { label: 'End', data: routeWeather.end, coords: routeCoords.end },
-                    ].map(segment => (
-                      <div key={segment.label} className="route-card">
-                        <div className="route-card-title">{segment.label}</div>
-                        <div className="route-card-location">{segment.data.location}</div>
-                        <div className="route-card-metrics">
-                          <span>{segment.data.forecast}</span>
-                          <span>{segment.data.temperature}°C</span>
-                          <span>{segment.data.rainProbability}% rain</span>
-                        </div>
-                        <div className="route-card-coords">{segment.coords.latitude.toFixed(3)}, {segment.coords.longitude.toFixed(3)}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="route-map-row">
-                    {[
-                      { label: 'Start', coords: routeCoords.start },
-                      { label: 'End', coords: routeCoords.end },
-                    ].map(pin => (
-                      <div key={pin.label} className="route-mini-map">
-                        <div className="route-mini-map-title">{pin.label}</div>
-                        <div className="map-window">
-                          <div className="map-grid">
-                            {getMapTiles(pin.coords.latitude, pin.coords.longitude, Math.min(mapZoom + 2, 14)).map((tile, idx) => (
-                              <img key={idx} src={tile.url} alt={`${pin.label} tile ${tile.x}/${tile.y}`} className="map-tile" />
-                            ))}
-                          </div>
-                          <div className="map-marker" title={pin.label} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-            </div>
+            <MapPreview
+              coordinates={coordinates}
+              locationLabel={weather?.location || liveLocation}
+              mapZoom={mapZoom}
+              onZoomIn={() => setMapZoom(z => Math.min(14, z + 1))}
+              onZoomOut={() => setMapZoom(z => Math.max(3, z - 1))}
+            />
+            <WeatherSummaryBlock weather={weather} />
+            <RoutePlannerPanel
+              routeStart={routeStart}
+              routeEnd={routeEnd}
+              routeStatus={routeStatus}
+              routeWeather={routeWeather}
+              routeCoords={routeCoords}
+              mapZoom={mapZoom}
+              onRouteStartChange={setRouteStart}
+              onRouteEndChange={setRouteEnd}
+              onPlanRoute={loadRouteWeather}
+            />
           </div>
         </div>
 
