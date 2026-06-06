@@ -5,6 +5,8 @@ export interface WeatherSummary {
   windSpeed: number;
   uvIndex: number;
   forecast: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export async function fetchLiveWeather(location: string): Promise<WeatherSummary> {

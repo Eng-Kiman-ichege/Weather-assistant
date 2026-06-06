@@ -10,6 +10,8 @@ interface Weather {
   windSpeed: number;
   uvIndex: number;
   forecast: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface CheckItem { label: string; pass: boolean; value: string; }
@@ -90,12 +92,52 @@ const weatherIcon = (f: string) => {
   return <CloudIcon />;
 };
 
+const OSM_TILE_SERVER = 'https://tile.openstreetmap.org';
+
+function lonToTile(lon: number, zoom: number) {
+  return Math.floor((lon + 180) / 360 * Math.pow(2, zoom));
+}
+
+function latToTile(lat: number, zoom: number) {
+  return Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+}
+
+function getMapTiles(lat: number, lon: number, zoom: number) {
+  const size = 1;
+  const tiles: Array<{ x: number; y: number; url: string }> = [];
+  const centerX = lonToTile(lon, zoom);
+  const centerY = latToTile(lat, zoom);
+  const maxIndex = Math.pow(2, zoom);
+
+  for (let dy = -size; dy <= size; dy++) {
+    for (let dx = -size; dx <= size; dx++) {
+      const x = ((centerX + dx) % maxIndex + maxIndex) % maxIndex;
+      const y = Math.min(Math.max(centerY + dy, 0), maxIndex - 1);
+      tiles.push({ x, y, url: `${OSM_TILE_SERVER}/${zoom}/${x}/${y}.png` });
+    }
+  }
+
+  return tiles;
+}
+
+async function fetchLocationCoordinates(location: string) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Failed to retrieve location from OpenStreetMap.');
+  const data = await response.json();
+  if (!Array.isArray(data) || data.length === 0) throw new Error('Location not found.');
+  return {
+    latitude: parseFloat(data[0].lat),
+    longitude: parseFloat(data[0].lon),
+  };
+}
+
 // ─── Data ─────────────────────────────────────────────────────────────────────
 const PRESETS: Weather[] = [
-  { location: 'Nairobi — Farming Highlands', temperature: 21, rainProbability: 75, windSpeed: 12, uvIndex: 6, forecast: 'Showers' },
-  { location: 'Miami — Coastal Beach',       temperature: 31, rainProbability: 10, windSpeed: 14, uvIndex: 10, forecast: 'Sunny' },
-  { location: 'Cape Town — Windy Ridge',     temperature: 17, rainProbability: 25, windSpeed: 48, uvIndex: 4,  forecast: 'Windy' },
-  { location: 'London — Chilly Storm',       temperature: 8,  rainProbability: 85, windSpeed: 25, uvIndex: 1,  forecast: 'Showers' },
+  { location: 'Nairobi — Farming Highlands', temperature: 21, rainProbability: 75, windSpeed: 12, uvIndex: 6, forecast: 'Showers', latitude: -1.2921, longitude: 36.8219 },
+  { location: 'Miami — Coastal Beach',       temperature: 31, rainProbability: 10, windSpeed: 14, uvIndex: 10, forecast: 'Sunny', latitude: 25.7617, longitude: -80.1918 },
+  { location: 'Cape Town — Windy Ridge',     temperature: 17, rainProbability: 25, windSpeed: 48, uvIndex: 4,  forecast: 'Windy', latitude: -33.9249, longitude: 18.4241 },
+  { location: 'London — Chilly Storm',       temperature: 8,  rainProbability: 85, windSpeed: 25, uvIndex: 1,  forecast: 'Showers', latitude: 51.5074, longitude: -0.1278 },
 ];
 
 const SUGGESTIONS = [
@@ -259,14 +301,27 @@ function analyze(query: string, w: Weather): Analysis {
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
+function getForecastClass(forecast: string) {
+  const f = forecast.toLowerCase();
+  if (f === 'sunny') return 'bg-sunny';
+  if (f === 'showers') return 'bg-showers';
+  if (f === 'thunderstorm') return 'bg-thunderstorm';
+  if (f === 'windy') return 'bg-windy';
+  return 'bg-cloudy';
+}
+
 export default function App() {
-  const openRouterModel = 'nvidia/nemotron-3-super-120b-a12b:free';
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window === 'undefined') return 'light';
+    return window.localStorage.getItem('weatherai-theme') === 'dark' ? 'dark' : 'light';
+  });
 
   const [launched, setLaunched] = useState(false);
   const [liveLocation, setLiveLocation] = useState('Nairobi');
   const [weatherSource, setWeatherSource] = useState<'simulated' | 'live'>('simulated');
-  const [aiMode, setAiMode] = useState<'local' | 'remote'>('remote');
+  const aiMode = 'remote';
   const [liveStatus, setLiveStatus] = useState('');
+  const [activePanel, setActivePanel] = useState<'simulator' | 'chat' | 'insights'>('chat');
 
   // Sandbox state (for landing page teaser)
   const [sandboxTopic, setSandboxTopic] = useState<'farming' | 'beach' | 'painting'>('farming');
@@ -277,6 +332,11 @@ export default function App() {
   // App (dashboard) state
   const [weather, setWeather] = useState<Weather>(PRESETS[0]);
   const [presetIdx, setPresetIdx] = useState(0);
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(() => {
+    const first = PRESETS[0];
+    return first.latitude != null && first.longitude != null ? { latitude: first.latitude, longitude: first.longitude } : null;
+  });
+  const [mapZoom, setMapZoom] = useState(8);
   const [messages, setMessages] = useState<Message[]>([{
     id: 'init', from: 'bot', time: now(),
     text: 'Hello! I\'m WeatherAI Copilot. Set your weather conditions using the simulator panel, then ask me any decision question — farming, beach, sports, home errands, and more.',
@@ -285,6 +345,20 @@ export default function App() {
   const [thinking, setThinking] = useState(false);
   const [lastAnalysis, setLastAnalysis] = useState<Analysis | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    document.documentElement.classList.add('no-transitions');
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem('weatherai-theme', theme);
+    
+    // Force reflow
+    void document.documentElement.offsetHeight;
+    
+    const timer = setTimeout(() => {
+      document.documentElement.classList.remove('no-transitions');
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [theme]);
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
@@ -297,6 +371,11 @@ export default function App() {
     setWeather(PRESETS[i]);
     setWeatherSource('simulated');
     setLiveStatus('');
+    const preset = PRESETS[i];
+    if (preset.latitude != null && preset.longitude != null) {
+      setCoordinates({ latitude: preset.latitude, longitude: preset.longitude });
+      setMapZoom(8);
+    }
   }
 
   async function loadLiveWeather() {
@@ -307,6 +386,15 @@ export default function App() {
       setWeatherSource('live');
       setPresetIdx(-1);
       setLiveStatus(`Live weather loaded for ${live.location}.`);
+
+      try {
+        const coords = await fetchLocationCoordinates(liveLocation);
+        setCoordinates(coords);
+        setMapZoom(9);
+        setLiveStatus(`Live weather and OpenStreetMap location loaded for ${live.location}.`);
+      } catch (mapError) {
+        setLiveStatus(prev => `${prev} (map unavailable)`);
+      }
     } catch (error) {
       setLiveStatus(error instanceof Error ? error.message : 'Failed to load weather.');
     }
@@ -326,10 +414,7 @@ export default function App() {
       try {
         remoteText = await requestAiSuggestion(q, weather);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'OpenRouter call failed.';
-        setMessages(p => [...p, { id: (Date.now() + 1).toString(), from: 'bot', text: `Remote AI error: ${message}`, time: now(), analysis }]);
-        setThinking(false);
-        return;
+        console.warn('AI suggestion request failed, falling back to local analysis:', error);
       }
     }
 
@@ -339,81 +424,142 @@ export default function App() {
 
   // ── COPILOT DASHBOARD VIEW ──────────────────────────────────────────────────
   if (launched) return (
-    <div className="app-page">
-      {/* App Header */}
-      <header className="app-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button
-            onClick={() => setLaunched(false)}
-            style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid var(--color-border)', background: 'var(--color-bg-soft)', fontSize: 12, fontWeight: 700, color: 'var(--color-text-muted)', cursor: 'pointer' }}
-          >← Back</button>
-          <div style={{ width: 1, height: 24, background: 'var(--color-border)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <BrandIcon />
-            <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 16, color: 'var(--color-text-heading)' }}>WeatherAI Copilot</span>
-          </div>
-        </div>
+    <div className={`app-page ${getForecastClass(weather.forecast)}`}>
+      {/* Background blobs */}
+      <div className="bg-blob blob-1" />
+      <div className="bg-blob blob-2" />
+      <div className="bg-blob blob-3" />
 
-        <div className="preset-pill-row" style={{ display: 'flex' }}>
-          {PRESETS.map((p, i) => (
-            <button key={i} className={`preset-pill ${presetIdx === i ? 'active' : ''}`} onClick={() => selectPreset(i)}>
-              {p.location.split('—')[0].trim()}
-            </button>
-          ))}
+      {/* ─── Header ─── */}
+      <header className="app-header">
+        <div className="app-header-top">
+          <button className="app-back-btn" onClick={() => setLaunched(false)}>
+            ← Landing
+          </button>
+          <div className="divider-v" />
+          <div className="app-header-brand">
+            <BrandIcon />
+            WeatherAI Copilot
+          </div>
+          <div className="spacer" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="status-dot" />
+            <span className="status-label">System Active</span>
+          </div>
+          <button className="theme-toggle" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}>
+            {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+          </button>
         </div>
       </header>
 
-      {/* Dashboard Grid */}
+      {/* ─── Preset Tabs ─── */}
+      <div className="preset-tabs">
+        {PRESETS.map((p, i) => (
+          <button
+            key={i}
+            className={`preset-tab ${presetIdx === i ? 'active' : ''}`}
+            onClick={() => selectPreset(i)}
+          >
+            <span className="preset-tab-dot" />
+            {p.location.split('—')[0].trim()}
+          </button>
+        ))}
+      </div>
+
+      {/* ─── Grid ─── */}
       <div className="app-grid">
 
-        {/* Simulator Panel */}
-        <div className="app-panel app-simulator" style={{ display: 'flex', flexDirection: 'column' }}>
-          <div className="sim-header">
-            <div className="panel-title">Weather Simulator</div>
-            <div className="panel-desc">Adjust parameters to test AI decisions.</div>
+        {/* ── Simulator Panel ── */}
+        <div className={`app-panel app-simulator ${activePanel === 'simulator' ? 'active-mobile' : ''}`}>
+          <div className="panel-header">
+            <div className="panel-header-icon">🌡️</div>
+            <div>
+              <div className="panel-title">Weather Simulator</div>
+              <div className="panel-desc">Configure parameters to test AI decisions</div>
+            </div>
           </div>
+
           <div className="sim-body">
             {/* Location chip */}
             <div className="location-chip">
               <div>{weatherIcon(weather.forecast)}</div>
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{weatherSource === 'live' ? 'Live Weather' : 'Simulated Location'}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-heading)' }}>{weather.location}</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{weather.forecast}</div>
+              <div className="location-chip-labels">
+                <div className="location-source-badge">
+                  {weatherSource === 'live' ? '📡 Live Weather' : '🧪 Simulated'}
+                </div>
+                <div className="location-name">{weather.location}</div>
+                <div className="location-forecast">{weather.forecast} · {weather.temperature}°C</div>
               </div>
             </div>
 
-            <div style={{ marginTop: 20, display: 'grid', gap: 12, padding: '14px', borderRadius: 16, background: 'var(--color-bg-soft)', border: '1px solid var(--color-border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>Weather source</span>
-                <span style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 999, padding: '6px 12px', fontSize: 12, color: 'var(--color-text-muted)' }}>
-                  {weatherSource === 'live' ? 'Live data' : 'Simulated data'}
+            {/* Live weather block */}
+            <div className="live-block">
+              <div className="live-block-header">
+                <span className="live-block-label">Live Weather Fetch</span>
+                <span className="live-source-badge">
+                  {weatherSource === 'live' ? '● Live' : '○ Simulated'}
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <div className="live-input-row">
                 <input
                   className="chat-input"
                   value={liveLocation}
                   onChange={e => setLiveLocation(e.target.value)}
-                  placeholder="Enter city or region"
-                  style={{ flex: 1, minWidth: 160, background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}
+                  placeholder="City or region…"
+                  style={{ flex: 1, height: 36, fontSize: 13 }}
                 />
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={loadLiveWeather}
+                  style={{ height: 36, flexShrink: 0 }}
                 >
-                  Fetch live forecast
+                  Fetch
                 </button>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                {liveStatus || 'Live weather is fetched through the Django backend.'}
+              <div className="live-status-text">
+                {liveStatus || 'Powered by the Django backend service.'}
               </div>
             </div>
 
-            {/* Forecast select */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 6 }}>Forecast State</div>
-              <select className="select-field" value={weather.forecast} onChange={e => setWeather(p => ({ ...p, forecast: e.target.value, location: 'Custom Location' }))}>
+            {/* OpenStreetMap location preview */}
+            <div className="map-block">
+              <div className="map-block-header">
+                <div>
+                  <div className="panel-title">Location Map</div>
+                  <div className="panel-desc">OpenStreetMap tiles show the current location context.</div>
+                </div>
+                <div className="map-toolbar">
+                  <button className="map-zoom-btn" onClick={() => setMapZoom(z => Math.max(3, z - 1))}>-</button>
+                  <span>{mapZoom}</span>
+                  <button className="map-zoom-btn" onClick={() => setMapZoom(z => Math.min(14, z + 1))}>+</button>
+                </div>
+              </div>
+              {coordinates ? (
+                <div className="map-window">
+                  <div className="map-grid">
+                    {getMapTiles(coordinates.latitude, coordinates.longitude, mapZoom).map((tile, idx) => (
+                      <img key={idx} src={tile.url} alt={`OSM tile ${tile.x}/${tile.y}`} className="map-tile" />
+                    ))}
+                  </div>
+                  <div className="map-marker" title="Current location" />
+                  <div className="map-meta">
+                    <div>{weather.location}</div>
+                    <div>{coordinates.latitude.toFixed(4)}, {coordinates.longitude.toFixed(4)}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="map-fallback">Choose a preset or fetch live weather to view the OpenStreetMap location.</div>
+              )}
+            </div>
+
+            {/* Forecast picker */}
+            <div className="forecast-block">
+              <label>Forecast State</label>
+              <select
+                className="select-field"
+                value={weather.forecast}
+                onChange={e => setWeather(p => ({ ...p, forecast: e.target.value, location: 'Custom Location' }))}
+              >
                 <option value="Sunny">☀️ Sunny</option>
                 <option value="Partly Cloudy">⛅ Partly Cloudy</option>
                 <option value="Showers">🌧️ Showers</option>
@@ -423,75 +569,68 @@ export default function App() {
             </div>
 
             {/* Sliders */}
-            {[
-              { label: 'Temperature', key: 'temperature' as const, min: -10, max: 45, unit: '°C' },
-              { label: 'Rain Probability', key: 'rainProbability' as const, min: 0, max: 100, unit: '%' },
-              { label: 'Wind Speed', key: 'windSpeed' as const, min: 0, max: 80, unit: ' km/h' },
-              { label: 'UV Index', key: 'uvIndex' as const, min: 0, max: 12, unit: '' },
-            ].map(({ label, key, min, max, unit }) => (
-              <div className="slider-row" key={key}>
-                <div className="slider-label-row">
-                  <span className="slider-label">{label}</span>
-                  <span className="slider-value">{weather[key]}{unit}</span>
+            <div className="sliders-block">
+              {[
+                { label: '🌡️ Temperature', key: 'temperature' as const, min: -10, max: 45, unit: '°C', cls: 'range-temp' },
+                { label: '🌧️ Rain Probability', key: 'rainProbability' as const, min: 0, max: 100, unit: '%', cls: 'range-rain' },
+                { label: '💨 Wind Speed', key: 'windSpeed' as const, min: 0, max: 80, unit: ' km/h', cls: 'range-wind' },
+                { label: '☀️ UV Index', key: 'uvIndex' as const, min: 0, max: 12, unit: '', cls: 'range-uv' },
+              ].map(({ label, key, min, max, unit, cls }) => (
+                <div className="slider-row" key={key}>
+                  <div className="slider-header">
+                    <span className="slider-label">{label}</span>
+                    <span className="slider-value">{weather[key]}{unit}</span>
+                  </div>
+                  <input
+                    type="range"
+                    className={cls}
+                    min={min} max={max}
+                    value={weather[key]}
+                    onChange={e => setWeather(p => ({ ...p, [key]: parseInt(e.target.value), location: 'Custom Location' }))}
+                  />
                 </div>
-                <input type="range" min={min} max={max} value={weather[key]}
-                  onChange={e => setWeather(p => ({ ...p, [key]: parseInt(e.target.value), location: 'Custom Location' }))} />
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Chat Panel */}
-        <div className="app-panel app-chat">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, marginBottom: 18 }}>
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 6 }}>AI Suggestion Engine</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-heading)' }}>{openRouterModel}</div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                className={`btn btn-sm ${aiMode === 'local' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setAiMode('local')}
-              >
-                Local decision engine
-              </button>
-              <button
-                className={`btn btn-sm ${aiMode === 'remote' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setAiMode('remote')}
-              >
-                OpenRouter AI
-              </button>
-            </div>
-          </div>
+        {/* ── Chat Panel ── */}
+        <div className={`app-panel app-chat ${activePanel === 'chat' ? 'active-mobile' : ''}`}>
+
+
           {/* Message feed */}
           <div className="chat-feed" ref={chatRef}>
             {messages.map(msg => (
               <div key={msg.id} className={`chat-row-full anim-msg ${msg.from}`}>
-                <div className="chat-avatar" style={{ background: msg.from === 'bot' ? 'var(--color-primary-light)' : 'var(--color-bg-soft)' }}>
+                <div
+                  className="chat-avatar-lg"
+                  style={{ background: msg.from === 'bot' ? 'var(--color-primary-light)' : 'var(--color-bg-soft)' }}
+                >
                   {msg.from === 'bot' ? <BotIcon /> : <UserAvatarIcon />}
                 </div>
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
                   <div className="chat-bubble-full">
                     {msg.analysis ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', background: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '2px 10px', borderRadius: 99, display: 'inline-block' }}>
-                          {msg.analysis.intent}
+                        <span className="bot-msg-intent">
+                          🎯 {msg.analysis.intent}
                         </span>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-text-heading)' }}>{msg.analysis.directAnswer}</div>
-                        <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{msg.analysis.explanation}</div>
-                        <div style={{ padding: '10px 14px', background: 'var(--color-success-light)', border: '1px solid rgba(22,163,74,0.15)', borderRadius: 10, fontSize: 13, fontWeight: 700, color: 'var(--color-success)', whiteSpace: 'pre-line' }}>
-                          {msg.analysis.recommendation}
-                        </div>
+                        <div className="bot-msg-answer">{msg.analysis.directAnswer}</div>
+                        <div className="bot-msg-explanation">{msg.analysis.explanation}</div>
+                        <div className="bot-msg-rec">{msg.analysis.recommendation}</div>
                       </div>
                     ) : msg.text}
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 4, padding: '0 4px' }}>{msg.time}</div>
+                  <div className="msg-time">{msg.time}</div>
                 </div>
               </div>
             ))}
+
             {thinking && (
               <div className="chat-row-full bot">
-                <div className="chat-avatar" style={{ background: 'var(--color-primary-light)' }}><BotIcon /></div>
+                <div className="chat-avatar-lg" style={{ background: 'var(--color-primary-light)' }}>
+                  <BotIcon />
+                </div>
                 <div className="typing-indicator">
                   <div className="typing-dot d1" />
                   <div className="typing-dot d2" />
@@ -503,74 +642,156 @@ export default function App() {
 
           {/* Quick suggestions */}
           <div className="chat-suggestion-bar">
-            <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', flexShrink: 0 }}>Ask:</span>
+            <span className="sug-label">Quick Ask:</span>
             {SUGGESTIONS.map((s, i) => (
-              <button key={i} className="sug-btn" onClick={() => sendMessage(s.q)}>{s.label.split(' ')[1]}</button>
+              <button key={i} className="sug-btn" onClick={() => sendMessage(s.q)}>
+                {s.label}
+              </button>
             ))}
           </div>
 
-          {/* Input bar */}
+          {/* Input */}
           <div className="chat-input-bar">
             <input
               className="chat-input"
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && sendMessage(input)}
-              placeholder="Ask a weather decision question..."
+              placeholder="Ask a weather-based decision question…"
               disabled={thinking}
             />
-            <button className="chat-send-btn" onClick={() => sendMessage(input)} disabled={!input.trim() || thinking}>
+            <button
+              className="chat-send-btn"
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || thinking}
+            >
               Analyze →
             </button>
           </div>
         </div>
 
-        {/* Audit Panel */}
-        <div className="app-panel app-insights" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
-          <div>
-            <div className="panel-title">Decision Audit</div>
-            <div className="panel-desc">Threshold check results from last query.</div>
-          </div>
-          {lastAnalysis ? (
-            <>
-              <div style={{ padding: '10px 14px', background: 'var(--color-bg-soft)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 4 }}>Intent</div>
-                <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--color-text-heading)' }}>{lastAnalysis.intent}</div>
-              </div>
-              <div className="safety-bar-row">
-                <div className="safety-bar-label-row">
-                  <span>Safety Index</span>
-                  <span style={{ color: lastAnalysis.safetyScore >= 75 ? 'var(--color-success)' : lastAnalysis.safetyScore >= 40 ? 'var(--color-warning)' : 'var(--color-danger)', fontWeight: 800 }}>{lastAnalysis.safetyScore}%</span>
-                </div>
-                <div className="safety-bar-track">
-                  <div className={`safety-bar-fill ${lastAnalysis.safetyScore >= 75 ? 'safety-high' : lastAnalysis.safetyScore >= 40 ? 'safety-mid' : 'safety-low'}`} style={{ width: `${lastAnalysis.safetyScore}%` }} />
-                </div>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)' }}>Parameter Checks</div>
-                {lastAnalysis.checklist.map((c, i) => (
-                  <div key={i} className="checklist-item">
-                    <span style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>{c.label}</span>
-                    <span className={`pass-badge ${c.pass ? 'pass' : 'fail'}`}>{c.value} {c.pass ? '✓' : '✗'}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-muted)', fontSize: 13 }}>
-              <div style={{ fontSize: 32, marginBottom: 10 }}>📋</div>
-              <div style={{ fontWeight: 600 }}>No query yet</div>
-              <div style={{ fontSize: 12, marginTop: 4 }}>Send a question to see the audit trail.</div>
+        {/* ── Decision Audit Panel ── */}
+        <div className={`app-panel app-insights ${activePanel === 'insights' ? 'active-mobile' : ''}`}>
+          <div className="panel-header">
+            <div className="panel-header-icon">📊</div>
+            <div>
+              <div className="panel-title">Decision Audit</div>
+              <div className="panel-desc">Threshold analysis from last query</div>
             </div>
-          )}
+          </div>
+
+          <div className="audit-body">
+            {lastAnalysis ? (
+              <>
+                {/* Intent card */}
+                <div className="audit-intent-card">
+                  <div className="audit-intent-label">Detected Intent</div>
+                  <div className="audit-intent-value">{lastAnalysis.intent}</div>
+                </div>
+
+                {/* SVG Safety Gauge */}
+                <div className="audit-gauge-container">
+                  <svg width="140" height="140" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="40" fill="transparent"
+                      stroke="var(--color-border)" strokeWidth="9" />
+                    <circle cx="50" cy="50" r="40" fill="transparent"
+                      stroke={
+                        lastAnalysis.safetyScore >= 75 ? 'rgba(16,185,129,0.12)'
+                        : lastAnalysis.safetyScore >= 40 ? 'rgba(245,158,11,0.12)'
+                        : 'rgba(239,68,68,0.12)'
+                      }
+                      strokeWidth="18" />
+                    <circle cx="50" cy="50" r="40" fill="transparent"
+                      stroke={
+                        lastAnalysis.safetyScore >= 75 ? 'var(--color-success)'
+                        : lastAnalysis.safetyScore >= 40 ? 'var(--color-warning)'
+                        : 'var(--color-danger)'
+                      }
+                      strokeWidth="9"
+                      strokeDasharray="251.2"
+                      strokeDashoffset={251.2 - (251.2 * lastAnalysis.safetyScore) / 100}
+                      strokeLinecap="round"
+                      transform="rotate(-90 50 50)"
+                      style={{ transition: 'stroke-dashoffset 0.85s cubic-bezier(0.4,0,0.2,1)' }}
+                    />
+                  </svg>
+                  <div className="audit-gauge-value">
+                    <span
+                      className="gauge-number"
+                      style={{
+                        color: lastAnalysis.safetyScore >= 75 ? 'var(--color-success)'
+                          : lastAnalysis.safetyScore >= 40 ? 'var(--color-warning)'
+                          : 'var(--color-danger)'
+                      }}
+                    >
+                      {lastAnalysis.safetyScore}
+                    </span>
+                    <span className="gauge-label">Safety Score</span>
+                  </div>
+                </div>
+
+                {/* Checklist */}
+                <div className="checklist-section">
+                  <div className="checklist-section-title">Parameter Checks</div>
+                  {lastAnalysis.checklist.map((c, i) => (
+                    <div key={i} className="checklist-item">
+                      <span className="checklist-item-label">{c.label}</span>
+                      <span className={`pass-badge ${c.pass ? 'pass' : 'fail'}`}>
+                        {c.value} {c.pass ? '✓' : '✗'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="audit-empty">
+                <div className="audit-empty-icon">📋</div>
+                <div className="audit-empty-title">No query yet</div>
+                <div className="audit-empty-desc">
+                  Ask a question in the chat to see the full audit trail with safety scoring and threshold checks.
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
+      </div>{/* /app-grid */}
+
+      {/* Sleek Mobile Bottom Navigation */}
+      <div className="mobile-nav">
+        <button
+          className={`mobile-nav-btn ${activePanel === 'simulator' ? 'active' : ''}`}
+          onClick={() => setActivePanel('simulator')}
+        >
+          <span className="mobile-nav-icon">🎛️</span>
+          <span className="mobile-nav-label">Simulator</span>
+        </button>
+        <button
+          className={`mobile-nav-btn ${activePanel === 'chat' ? 'active' : ''}`}
+          onClick={() => setActivePanel('chat')}
+        >
+          <span className="mobile-nav-icon">💬</span>
+          <span className="mobile-nav-label">Copilot</span>
+        </button>
+        <button
+          className={`mobile-nav-btn ${activePanel === 'insights' ? 'active' : ''}`}
+          onClick={() => setActivePanel('insights')}
+        >
+          <span className="mobile-nav-icon">📊</span>
+          <span className="mobile-nav-label">Audit</span>
+        </button>
       </div>
     </div>
   );
 
+
   // ── LANDING PAGE ─────────────────────────────────────────────────────────────
   return (
     <div className="page-wrap">
+      {/* Decorative particles / blobs */}
+      <div className="bg-blob blob-1"></div>
+      <div className="bg-blob blob-2"></div>
+      <div className="bg-blob blob-3"></div>
 
       {/* ── Navbar ── */}
       <nav className="navbar">
@@ -585,9 +806,14 @@ export default function App() {
               <li><a href="#demo">Sandbox Demo</a></li>
               <li><a href="#testimonials">Testimonials</a></li>
             </ul>
-            <button className="btn btn-primary btn-sm" onClick={() => setLaunched(true)}>
-              Launch Copilot →
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button className="theme-toggle" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')}>
+                {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={() => setLaunched(true)}>
+                Launch Copilot →
+              </button>
+            </div>
           </div>
         </div>
       </nav>
@@ -604,7 +830,7 @@ export default function App() {
                 <span className="gradient-text">Powered by AI</span>
               </h1>
               <p className="hero-desc">
-                WeatherAI Copilot translates atmospheric data into clear, actionable advice. Plan planting cycles, beach trips, fitness sessions, and home maintenance with total confidence.
+                WeatherAI Copilot translates atmospheric data into clear, actionable advice. Plan planting cycles, beach trips, fitness sessions, and home maintenance with OpenStreetMap-backed location context.
               </p>
               <div className="hero-ctas">
                 <button className="btn btn-primary" onClick={() => setLaunched(true)}>Get Started Free</button>
@@ -626,7 +852,7 @@ export default function App() {
                   <div className="chat-avatar" style={{ background: 'var(--color-primary-light)' }}><BotIcon /></div>
                   <div className="chat-bubble bot-bubble">
                     <div className="answer">Rain is expected over the weekend, providing good soil moisture.</div>
-                    <div>Planting maize during this period is favorable.</div>
+                    <div style={{ color: 'var(--color-text)' }}>Planting maize during this period is favorable.</div>
                     <div className="recommendation">Recommended planting time:<br />Saturday morning.</div>
                   </div>
                 </div>
@@ -646,13 +872,13 @@ export default function App() {
           </div>
           <div className="features-grid">
             {[
-              { icon: '🌾', title: 'Farming & Agriculture', color: '#d1fae5', iconColor: '#16a34a', desc: 'Determine optimal planting times based on moisture trends, and check wind-safety limits before spraying crops.' },
-              { icon: '🏖️', title: 'Travel & Leisure',      color: '#fef3c7', iconColor: '#d97706', desc: 'Validate beach conditions, flag high UV index days, and assess visibility for road trips and outdoor holidays.' },
-              { icon: '🏃', title: 'Sports & Training',     color: '#dbeafe', iconColor: '#2563eb', desc: 'Check temperature ranges, precipitation hazards, and wind to keep your running, hiking, and sports sessions safe.' },
+              { icon: '🌾', title: 'Farming & Agriculture', color: '#d1fae5', iconColor: '#10b981', desc: 'Determine optimal planting times based on moisture trends, and check wind-safety limits before spraying crops.' },
+              { icon: '🏖️', title: 'Travel & Leisure',      color: '#fef3c7', iconColor: '#f59e0b', desc: 'Validate beach conditions, flag high UV index days, and explore routes with OpenStreetMap-backed location context.' },
+              { icon: '🏃', title: 'Sports & Training',     color: '#dbeafe', iconColor: '#6366f1', desc: 'Check temperature ranges, precipitation hazards, and wind to keep your running, hiking, and sports sessions safe.' },
               { icon: '🏠', title: 'Home & Maintenance',    color: '#f3e8ff', iconColor: '#7c3aed', desc: 'Verify moisture thresholds before painting walls, check drying windows for laundry, and plan outdoor projects.' },
             ].map(f => (
               <div className="feature-card" key={f.title}>
-                <div className="feature-icon-wrap" style={{ background: f.color }}>
+                <div className="feature-icon-wrap" style={{ backgroundColor: theme === 'light' ? f.color : 'rgba(255, 255, 255, 0.04)', border: theme === 'light' ? 'none' : `1.5px solid ${f.iconColor}` }}>
                   <span style={{ fontSize: 22 }}>{f.icon}</span>
                 </div>
                 <div className="feature-title">{f.title}</div>
@@ -666,16 +892,16 @@ export default function App() {
       {/* ── Sandbox Demo ── */}
       <section id="demo" className="section">
         <div className="container">
-          <div style={{ marginBottom: 48 }}>
+          <div style={{ marginBottom: 48, textAlign: 'center' }}>
             <span className="section-label">Interactive Teaser</span>
             <h2 className="section-title">Tweak the Sandbox. Witness the Decision.</h2>
-            <p className="section-desc">Slide the controls to adjust simulated weather conditions and watch the AI recommendation update instantly.</p>
+            <p className="section-desc" style={{ margin: '0 auto' }}>Slide the controls to adjust simulated weather conditions and watch the AI recommendation update instantly.</p>
           </div>
           <div className="sandbox-grid">
             {/* Controls */}
             <div className="sandbox-panel">
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 10 }}>1. Select Your Query</div>
+                <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-muted)', marginBottom: 12 }}>1. Select Your Query</div>
                 <div className="sandbox-topic-row">
                   {(['farming', 'beach', 'painting'] as const).map(t => (
                     <button key={t} className={`topic-btn ${sandboxTopic === t ? 'active' : ''}`} onClick={() => setSandboxTopic(t)}>
@@ -717,15 +943,42 @@ export default function App() {
               <div className="result-answer">{sandboxResult.directAnswer}</div>
               <div className="result-explanation">{sandboxResult.explanation}</div>
               <div className="result-rec">{sandboxResult.recommendation}</div>
-              <div className="safety-bar-row">
-                <div className="safety-bar-label-row">
-                  <span>Safety Index</span>
-                  <span style={{ color: sandboxResult.safetyScore >= 75 ? 'var(--color-success)' : sandboxResult.safetyScore >= 40 ? 'var(--color-warning)' : 'var(--color-danger)', fontWeight: 800 }}>
+              
+              <div className="audit-gauge-container">
+                <svg width="120" height="120" viewBox="0 0 100 100">
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                    stroke="var(--color-border)"
+                    strokeWidth="8"
+                  />
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="transparent"
+                    stroke={
+                      sandboxResult.safetyScore >= 75
+                        ? 'var(--color-success)'
+                        : sandboxResult.safetyScore >= 40
+                        ? 'var(--color-warning)'
+                        : 'var(--color-danger)'
+                    }
+                    strokeWidth="8"
+                    strokeDasharray="251.2"
+                    strokeDashoffset={251.2 - (251.2 * sandboxResult.safetyScore) / 100}
+                    strokeLinecap="round"
+                    transform="rotate(-90 50 50)"
+                    style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }}
+                  />
+                </svg>
+                <div className="audit-gauge-value" style={{ fontSize: '20px' }}>
+                  <span style={{ color: sandboxResult.safetyScore >= 75 ? 'var(--color-success)' : sandboxResult.safetyScore >= 40 ? 'var(--color-warning)' : 'var(--color-danger)' }}>
                     {sandboxResult.safetyScore}%
                   </span>
-                </div>
-                <div className="safety-bar-track">
-                  <div className={`safety-bar-fill ${sandboxResult.safetyScore >= 75 ? 'safety-high' : sandboxResult.safetyScore >= 40 ? 'safety-mid' : 'safety-low'}`} style={{ width: `${sandboxResult.safetyScore}%` }} />
+                  <span className="audit-gauge-label">Safety</span>
                 </div>
               </div>
             </div>
