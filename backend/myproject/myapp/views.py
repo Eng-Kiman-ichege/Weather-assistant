@@ -168,9 +168,6 @@ def weather_view(request):
     if not location:
         return HttpResponseBadRequest('Missing location parameter.')
 
-    print(f"DEBUG: WEATHER_API_KEY is set: {bool(settings.WEATHER_API_KEY)}")
-    print(f"DEBUG: WEATHER_API_KEY value: {settings.WEATHER_API_KEY[:20] if settings.WEATHER_API_KEY else 'None'}...")
-
     if settings.WEATHER_API_KEY:
         encoded = urllib.parse.quote(location)
         url = f"{settings.WEATHER_API_BASE}/v1/weather?location={encoded}&ai=false&units=metric&days=3"
@@ -183,11 +180,6 @@ def weather_view(request):
             data = _fetch_json(url, headers)
         except Exception as exc:
             return HttpResponseServerError(f'Failed to fetch weather: {exc}')
-
-        print(f"DEBUG: Raw API response data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
-        if isinstance(data, dict) and 'current' in data:
-            print(f"DEBUG: current keys: {list(data['current'].keys())}")
-            print(f"DEBUG: current.temperature: {data['current'].get('temperature')}")
 
         data = _unwrap_payload(data)
         raw_location = _get_nested(data, 'location', 'name') or location
