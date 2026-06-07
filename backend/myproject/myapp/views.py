@@ -97,6 +97,10 @@ def _contains_weather_keys(data: object) -> bool:
     return False
 
 
+def _is_missing_weather(temperature: float, rain: float, wind: float, uv: float) -> bool:
+    return temperature == 0.0 and rain == 0.0 and wind == 0.0 and uv == 0.0
+
+
 def _get_nested(data: dict, *keys):
     for key in keys:
         if not isinstance(data, dict):
@@ -210,15 +214,15 @@ def weather_view(request):
         raw_location = _get_nested(data, 'location', 'name') or location
         normalized_location = _safe_string(raw_location, location)
 
-        temperature = _safe_float(_get_nested(data, 'temperature', 'temp', 'current_temperature', 'current.temp'))
-        rain_probability = _safe_float(_get_nested(data, 'rainProbability', 'precipitationChance', 'precipitation_probability', 'precipitation'))
-        wind_speed = _safe_float(_get_nested(data, 'windSpeed', 'wind_speed', 'windspeed', 'windSpeed'))
-        uv_index = _safe_float(_get_nested(data, 'uvIndex', 'uv_index', 'uv'))
+        temperature = _safe_float(_get_nested(data, 'current.temperature', 'temperature', 'current.temp', 'temp', 'current_temperature'))
+        rain_probability = _safe_float(_get_nested(data, 'current.precipitation_probability', 'rainProbability', 'precipitationChance', 'precipitation_probability', 'precipitation'))
+        wind_speed = _safe_float(_get_nested(data, 'current.wind_speed', 'windSpeed', 'wind_speed', 'windspeed'))
+        uv_index = _safe_float(_get_nested(data, 'current.uv_index', 'uvIndex', 'uv_index', 'uv'))
         forecast_value = _get_nested(data, 'forecast', 'summary', 'weather', 'condition')
         forecast = _safe_string(forecast_value, 'Partly Cloudy')
         print(f"DEBUG: Extracted values - temp={temperature}, rain={rain_probability}, wind={wind_speed}, uv={uv_index}")
         print(f"DEBUG: API data keys: {list(data.keys())}")
-        if not _contains_weather_keys(data):
+        if not _contains_weather_keys(data) or _is_missing_weather(temperature, rain_probability, wind_speed, uv_index):
             coords = _geocode_location(location)
             if coords:
                 open_meteo_url = (

@@ -10,9 +10,9 @@ export interface WeatherSummary {
 }
 
 const DEFAULT_REMOTE_BACKEND = 'https://weather-assistant-t0ds.onrender.com';
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || DEFAULT_REMOTE_BACKEND;
-const WEATHER_API_KEY = import.meta.env.VITE_WEATHER_API_KEY?.trim() || '';
-const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY?.trim() || '';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL?.trim() || import.meta.env.BACKEND_URL?.trim() || DEFAULT_REMOTE_BACKEND;
+const WEATHER_API_KEY = import.meta.env.VITE_WEATHER_API_KEY?.trim() || import.meta.env.WEATHER_API_KEY?.trim() || '';
+const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY?.trim() || import.meta.env.OPENROUTER_API_KEY?.trim() || '';
 
 async function apiFetch(path: string, options?: RequestInit) {
   const url = BACKEND_URL ? `${BACKEND_URL}${path}` : path;
@@ -76,9 +76,15 @@ async function fetchOpenMeteoWeather(location: string): Promise<WeatherSummary> 
   };
 }
 
+const isWeatherMissing = (weather: WeatherSummary) =>
+  Number(weather.temperature) === 0 &&
+  Number(weather.rainProbability) === 0 &&
+  Number(weather.windSpeed) === 0 &&
+  Number(weather.uvIndex) === 0;
+
 async function fetchWeatherDirect(location: string): Promise<WeatherSummary> {
   if (!WEATHER_API_KEY) {
-    throw new Error('Missing VITE_WEATHER_API_KEY. Set this in your local .env.local and in Vercel environment variables.');
+    throw new Error('Missing WEATHER_API_KEY (or VITE_WEATHER_API_KEY). Set this in your local .env.local and in Render environment variables.');
   }
 
   const encodedLocation = encodeURIComponent(location);
@@ -96,9 +102,24 @@ async function fetchWeatherDirect(location: string): Promise<WeatherSummary> {
   const data = await response.json();
   const current = data.current ?? {};
   const temperature = current.temperature ?? current.temp ?? 0;
-  const rainProbability = current.precipitation_probability ?? current.precipitationChance ?? current.precipitation ?? 0;
   const windSpeed = current.wind_speed ?? current.windspeed ?? current.windSpeed ?? 0;
-  const uvIndex = current.uv_index ?? current.uvIndex ?? 0;
+  let rainProbability = current.precipitation_probability ?? current.precipitationChance ?? current.precipitation ?? 0;
+  let uvIndex = current.uv_index ?? current.uvIndex ?? 0;
+
+  const currentTime = current.time ?? data.current_time ?? '';
+  const hourly = data.hourly ?? {};
+  if (currentTime && Array.isArray(hourly.time)) {
+    const idx = hourly.time.indexOf(currentTime);
+    if (idx !== -1) {
+      if (!('precipitation_probability' in current) && Array.isArray(hourly.precipitation_probability)) {
+        rainProbability = Number(hourly.precipitation_probability[idx] ?? rainProbability);
+      }
+      if (!('uv_index' in current) && Array.isArray(hourly.uv_index)) {
+        uvIndex = Number(hourly.uv_index[idx] ?? uvIndex);
+      }
+    }
+  }
+
   let forecast = current.condition ?? current.condition_code ?? data.forecast ?? '';
   if (typeof forecast === 'number') forecast = String(forecast);
   const mapConditionCode = (code: number) => {
@@ -142,7 +163,11 @@ async function fetchWeatherDirect(location: string): Promise<WeatherSummary> {
 
 export async function fetchLiveWeather(location: string): Promise<WeatherSummary> {
   if (BACKEND_URL) {
-    return apiFetch(`/api/weather/?location=${encodeURIComponent(location)}`);
+    const weather = await apiFetch(`/api/weather/?location=${encodeURIComponent(location)}`);
+    if (isWeatherMissing(weather) && WEATHER_API_KEY) {
+      return fetchWeatherDirect(location);
+    }
+    return weather;
   }
 
   try {
@@ -164,7 +189,7 @@ export async function requestAiSuggestion(question: string, weather: WeatherSumm
   };
 
   if (!OPENROUTER_API_KEY) {
-    throw new Error('Missing VITE_OPENROUTER_API_KEY. Set this in your local .env.local and in Vercel environment variables.');
+    throw new Error('Missing OPENROUTER_API_KEY (or VITE_OPENROUTER_API_KEY). Set this in your local .env.local and in Render environment variables.');
   }
 
   const response = await fetch('https://openrouter.ai/v1/chat/completions', {
